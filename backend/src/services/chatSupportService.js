@@ -1,112 +1,205 @@
+const CRISIS_KEYWORDS = /suicide|kill myself|end my life|self[-\s]?harm|hurt myself|cut myself|overdose|do not want to live|want to die|jump off|emergency/i;
+const PANIC_KEYWORDS = /panic|can.?t breathe|breathless|freaking out|overwhelmed|shaking|spiraling/i;
+const SLEEP_KEYWORDS = /sleep|insomnia|nightmare|restless|exhausted|can.?t sleep|tired/i;
+const CONNECTION_KEYWORDS = /lonely|alone|isolated|nobody|no one|left out/i;
+const SAD_KEYWORDS = /sad|hopeless|empty|cry|down|depressed|worthless/i;
+const ANGRY_KEYWORDS = /angry|mad|furious|irritated|frustrated|annoyed/i;
+
 function normalizeConversationHistory(conversationHistory = []) {
   if (!Array.isArray(conversationHistory)) {
     return [];
   }
 
   return conversationHistory
-    .map((entry) => String(entry).trim())
+    .map((entry) => {
+      if (entry && typeof entry === "object") {
+        const role = entry.role || entry.sender || entry.author || "";
+        const text = entry.text || entry.message || entry.content || entry.body || "";
+        const combined = [role, text].filter(Boolean).join(": ");
+        return String(combined || text).trim();
+      }
+
+      return String(entry).trim();
+    })
     .filter(Boolean)
     .slice(-6);
 }
 
-function detectSupportTheme(message) {
-  const normalized = String(message || "").toLowerCase();
+function normalizeText(value) {
+  return String(value || "").trim();
+}
 
-  if (/panic|overwhelm|overwhelmed|can.?t breathe|breathless|freaking out/.test(normalized)) {
-    return "grounding";
-  }
+function detectEmotion(message, mode) {
+  const normalized = normalizeText(message).toLowerCase();
+  const safeMode = normalizeText(mode).toLowerCase();
 
-  if (/sleep|insomnia|tired|exhausted|rest/i.test(normalized)) {
+  if (safeMode === "sleep" || SLEEP_KEYWORDS.test(normalized)) {
     return "sleep";
   }
 
-  if (/lonely|alone|isolated|nobody|no one/i.test(normalized)) {
-    return "connection";
+  if (safeMode === "panic" || PANIC_KEYWORDS.test(normalized)) {
+    return "panic";
   }
 
-  if (/sad|down|empty|hopeless|cry|depressed/i.test(normalized)) {
-    return "comfort";
+  if (safeMode === "grounding") {
+    return "grounding";
   }
 
-  if (/angry|mad|irritated|frustrated|annoyed/i.test(normalized)) {
-    return "calm";
-  }
-
-  return "support";
+  return "supportive";
 }
 
-function buildHistoryContext(conversationHistory) {
-  if (!conversationHistory.length) {
-    return "";
-  }
-
-  const lastMessage = conversationHistory[conversationHistory.length - 1];
-  return ` You were just talking about: ${lastMessage.slice(0, 80)}.`;
-}
-
-function buildFallbackReply({ message, stressLevel, conversationHistory = [] }) {
-  const history = normalizeConversationHistory(conversationHistory);
-  const theme = detectSupportTheme(message);
-  const historyContext = buildHistoryContext(history);
+function detectRiskLevel(message, mode, stressLevel) {
+  const normalized = normalizeText(message).toLowerCase();
+  const safeMode = normalizeText(mode).toLowerCase();
   const stress = Number(stressLevel || 5);
 
+  if (CRISIS_KEYWORDS.test(normalized)) {
+    return "high";
+  }
+
+  if (safeMode === "panic" || stress >= 8 || PANIC_KEYWORDS.test(normalized)) {
+    return "high";
+  }
+
+  if (
+    stress >= 5 ||
+    SAD_KEYWORDS.test(normalized) ||
+    CONNECTION_KEYWORDS.test(normalized) ||
+    ANGRY_KEYWORDS.test(normalized)
+  ) {
+    return "moderate";
+  }
+
+  return "low";
+}
+
+function summarizeContext(context, conversationHistory) {
+  const summaryParts = [];
+
+  if (context && typeof context === "string" && context.trim()) {
+    summaryParts.push(context.trim().slice(0, 120));
+  } else if (context && typeof context === "object") {
+    const compact = Object.entries(context)
+      .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
+      .map(([key, value]) => `${key}=${String(value).trim().slice(0, 40)}`)
+      .slice(0, 3)
+      .join(", ");
+    if (compact) {
+      summaryParts.push(compact);
+    }
+  }
+
+  const history = normalizeConversationHistory(conversationHistory);
+  if (history.length > 0) {
+    summaryParts.push(`recent: ${history[history.length - 1].slice(0, 90)}`);
+  }
+
+  return summaryParts.join(" | ");
+}
+
+function buildSuggestions({ riskLevel, emotion }) {
+  if (riskLevel === "high") {
+    return [
+      "Consider speaking with a licensed mental health professional.",
+      "If you might act on self-harm thoughts, call local emergency services or a crisis line now.",
+      "Move to a safer space and contact a trusted person immediately.",
+    ];
+  }
+
+  if (riskLevel === "moderate") {
+    return [
+      "Consider speaking with a licensed mental health professional.",
+      "Share this with someone you trust if it feels safe.",
+      emotion === "sleep"
+        ? "Try a calm bedtime routine and keep the next step very small."
+        : "Use a short breathing or grounding exercise for 3 minutes.",
+    ];
+  }
+
+  return [
+    "Use a short breathing reset or grounding pause.",
+    "Hydrate, stretch, and keep the next step small.",
+    "If you want, tell me one thing that feels hardest right now.",
+  ];
+}
+
+function buildReply({ message, mode, riskLevel, emotion, context, conversationHistory }) {
+  const normalizedMessage = normalizeText(message);
+  const history = normalizeConversationHistory(conversationHistory);
+  const contextSummary = summarizeContext(context, history);
+
+  if (riskLevel === "high") {
+    return [
+      "I'm really glad you told me. Your safety matters right now.",
+      "Please move toward a trusted person, call local emergency services or a crisis line now, and keep yourself away from anything you could use to harm yourself.",
+      "If you can, take one slow breath and let someone nearby know you need immediate support.",
+      contextSummary ? `Context noted: ${contextSummary}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
   const opening = (() => {
-    switch (theme) {
-      case "grounding":
-        return "I’m here with you right now. Let’s slow this down together.";
+    switch (emotion) {
+      case "panic":
+        return "I'm here with you. Let's slow the moment down together.";
       case "sleep":
-        return "I hear you. Let’s make this moment a little quieter and softer.";
-      case "connection":
-        return "You do not have to carry this alone. I’m here with you.";
-      case "comfort":
-        return "That sounds heavy, and it makes sense that you feel worn down.";
-      case "calm":
-        return "That sounds frustrating. Let’s lower the intensity one step at a time.";
+        return "I hear you. Let's make this moment a little quieter and softer.";
+      case "grounding":
+        return "You do not have to carry this alone. Let's ground for a moment.";
       default:
-        return "I hear you, and I’m here to support you.";
+        return "I hear you, and I am here to support you.";
     }
   })();
 
   const guidance = (() => {
-    if (stress >= 8 || theme === "grounding") {
-      return (
-        "Take one slow breath with me: inhale for 4, hold for 4, and exhale for 6. " +
-        "Then name 3 things you can see and press both feet into the floor."
-      );
+    if (emotion === "panic") {
+      return "Try a 4-4-6 breath: inhale for 4, hold for 4, exhale for 6. Then name 3 things you can see and press both feet into the floor.";
     }
 
-    if (theme === "sleep") {
-      return (
-        "Try relaxing your jaw, dropping your shoulders, and letting each exhale be a little longer than the inhale. " +
-        "If you can, dim the lights and keep the next step very small."
-      );
+    if (emotion === "sleep") {
+      return "Try relaxing your jaw, dropping your shoulders, and letting each exhale be a little longer than the inhale. If you can, dim the lights and keep the next step very small.";
     }
 
-    if (theme === "connection") {
-      return (
-        "A good next step might be sending a short message to someone safe or writing down what you wish someone would say to you right now."
-      );
+    if (mode === "grounding") {
+      return "Place one hand on your chest, one on your stomach, and notice the support of the chair or floor beneath you.";
     }
 
-    if (theme === "comfort") {
-      return (
-        "For this moment, keep the goal very small: drink some water, loosen your shoulders, and notice one thing that feels steady around you."
-      );
-    }
-
-    return (
-      "Let’s stay with one small action: take a breath, unclench your hands, and choose the next kind thing you can do for yourself."
-    );
+    return "Take one small action: breathe once, unclench your hands, and choose the kindest next step you can do right now.";
   })();
 
-  const closing =
-    history.length > 0
-      ? ` We can keep building from where you left off.${historyContext}`
-      : "";
+  const historyContext = history.length > 0 ? " We can keep building from where you left off." : "";
+  const contextLine = contextSummary ? ` Context: ${contextSummary}.` : "";
+  const messageLine = normalizedMessage ? ` You mentioned: ${normalizedMessage.slice(0, 120)}.` : "";
 
-  return `${opening} ${guidance}${closing}`.replace(/\s+/g, " ").trim();
+  return `${opening} ${guidance}${historyContext}${contextLine}${messageLine}`.replace(/\s+/g, " ").trim();
+}
+
+function buildFallbackReply(payload = {}) {
+  const emotion = detectEmotion(payload.message, payload.mode);
+  const riskLevel = detectRiskLevel(payload.message, payload.mode, payload.stressLevel);
+  const suggestions = buildSuggestions({ riskLevel, emotion });
+  const reply = buildReply({
+    message: payload.message,
+    mode: payload.mode,
+    riskLevel,
+    emotion,
+    context: payload.context,
+    conversationHistory: payload.conversationHistory,
+  });
+
+  return {
+    reply,
+    emotion,
+    riskLevel,
+    suggestions,
+  };
 }
 
 module.exports = {
   buildFallbackReply,
+  buildSuggestions,
+  detectEmotion,
+  detectRiskLevel,
+  normalizeConversationHistory,
 };
