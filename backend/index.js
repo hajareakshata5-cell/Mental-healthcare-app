@@ -3,11 +3,23 @@ const env = require("./src/config/env");
 const { connectDb } = require("./src/config/db");
 const { createApp } = require("./src/app");
 const { registerSocketHandlers } = require("./src/sockets");
+const packageJson = require("./package.json");
 
 async function bootstrap() {
   await connectDb();
 
   const app = createApp();
+
+  app.get("/deployment-version", (_req, res) => {
+    res.json({
+      app: "mentalhealth-backend",
+      routes: "full-api",
+      version: packageJson.version,
+      timestamp: new Date().toISOString(),
+      entrypoint: "backend/index.js",
+    });
+  });
+
   const server = http.createServer(app);
 
   registerSocketHandlers(server, env.socketCorsOrigins);
