@@ -30,6 +30,7 @@ function createApp() {
       "GET /api/v1/profile/me",
       "GET /api/v1/mood",
       "POST /api/v1/mood",
+      "POST /api/v1/chat/respond",
       "socket.io /",
     ],
   };
