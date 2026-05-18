@@ -16,6 +16,24 @@ function createApp() {
   const jsonParser = express.json({ limit: "1mb" });
   const allowedOrigins = new Set(env.corsOrigins);
 
+  app.locals.routeManifest = {
+    app: "mentalhealth-backend",
+    routes: [
+      "GET /",
+      "GET /health",
+      "GET /deployment-version",
+      "POST /api/v1/auth/register",
+      "POST /api/v1/auth/login",
+      "POST /api/v1/auth/guest",
+      "POST /api/v1/auth/firebase",
+      "GET /api/v1/auth/me",
+      "GET /api/v1/profile/me",
+      "GET /api/v1/mood",
+      "POST /api/v1/mood",
+      "socket.io /",
+    ],
+  };
+
   app.set("trust proxy", env.trustedProxy);
 
   app.use(

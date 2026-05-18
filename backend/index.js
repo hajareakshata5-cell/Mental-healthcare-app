@@ -1,28 +1,28 @@
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
+const http = require("http");
+const env = require("./src/config/env");
+const { connectDb } = require("./src/config/db");
+const { createApp } = require("./src/app");
+const { registerSocketHandlers } = require("./src/sockets");
 
-dotenv.config();
+async function bootstrap() {
+  await connectDb();
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+  const app = createApp();
+  const server = http.createServer(app);
 
-app.use(cors());
-app.use(express.json());
+  registerSocketHandlers(server, env.socketCorsOrigins);
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "Mental Health App Backend Running",
-    version: "1.0.0",
-    timestamp: new Date().toISOString(),
+  // eslint-disable-next-line no-console
+  console.log("[server] route manifest", JSON.stringify(app.locals.routeManifest));
+
+  server.listen(env.port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`[server] backend running on http://localhost:${env.port}`);
   });
-});
+}
 
-app.get("/health", (req, res) => {
-  res.json({ status: "healthy" });
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Backend Server running on http://localhost:${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+bootstrap().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error("[server] Failed to start", error);
+  process.exit(1);
 });
