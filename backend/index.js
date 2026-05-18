@@ -25,7 +25,10 @@ async function bootstrap() {
   registerSocketHandlers(server, env.socketCorsOrigins);
 
   // eslint-disable-next-line no-console
-  console.log("[server] route manifest", JSON.stringify(app.locals.routeManifest));
+  console.log(
+    "[server] route manifest",
+    JSON.stringify(app.locals.routeManifest),
+  );
 
   server.listen(env.port, () => {
     // eslint-disable-next-line no-console
