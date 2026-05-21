@@ -9,6 +9,10 @@ const {
   verifyRefreshToken,
 } = require("../services/tokenService");
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
 function randomAlias() {
   return `anon_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -61,7 +65,9 @@ const register = asyncHandler(async (req, res) => {
     throw new ApiError(400, "email, password and username are required");
   }
 
-  const existing = await User.findOne({ $or: [{ email }, { username }] });
+  const normalizedEmail = normalizeEmail(email);
+
+  const existing = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] });
   if (existing) {
     throw new ApiError(
       409,
@@ -71,7 +77,7 @@ const register = asyncHandler(async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({
-    email,
+    email: normalizedEmail,
     username,
     displayName,
     passwordHash,
@@ -99,7 +105,9 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, "email and password are required");
   }
 
-  const user = await User.findOne({ email });
+  const normalizedEmail = normalizeEmail(email);
+
+  const user = await User.findOne({ email: normalizedEmail });
   if (!user || !user.passwordHash) {
     throw new ApiError(401, "Invalid credentials");
   }
