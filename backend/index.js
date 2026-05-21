@@ -18,7 +18,8 @@ function logStartupDiagnostics() {
 }
 
 function logFatalError(label, error) {
-  const stack = error instanceof Error ? error.stack || error.message : String(error);
+  const stack =
+    error instanceof Error ? error.stack || error.message : String(error);
 
   // eslint-disable-next-line no-console
   console.error(label, stack);

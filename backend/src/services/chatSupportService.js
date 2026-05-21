@@ -29,6 +29,65 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function scoreRiskSignals(message, mode, stressLevel, context) {
+  const normalized = normalizeText(message).toLowerCase();
+  const safeMode = normalizeText(mode).toLowerCase();
+  const stress = Number(stressLevel || 5);
+
+  let score = 0;
+  const signals = [];
+
+  if (CRISIS_KEYWORDS.test(normalized)) {
+    score += 100;
+    signals.push("crisis");
+  }
+
+  if (PANIC_KEYWORDS.test(normalized) || safeMode === "panic") {
+    score += 35;
+    signals.push("panic");
+  }
+
+  if (SLEEP_KEYWORDS.test(normalized) || safeMode === "sleep") {
+    score += 12;
+    signals.push("sleep");
+  }
+
+  if (SAD_KEYWORDS.test(normalized)) {
+    score += 22;
+    signals.push("sadness");
+  }
+
+  if (CONNECTION_KEYWORDS.test(normalized)) {
+    score += 14;
+    signals.push("loneliness");
+  }
+
+  if (ANGRY_KEYWORDS.test(normalized)) {
+    score += 12;
+    signals.push("anger");
+  }
+
+  if (stress >= 8) {
+    score += 30;
+    signals.push("very-high-stress");
+  } else if (stress >= 5) {
+    score += 14;
+    signals.push("elevated-stress");
+  }
+
+  if (context && typeof context === "object") {
+    const compactContext = Object.values(context)
+      .map((value) => normalizeText(value).toLowerCase())
+      .join(" ");
+    if (/depress|hopeless|worthless|empty|overloaded/.test(compactContext)) {
+      score += 16;
+      signals.push("context-depression-signal");
+    }
+  }
+
+  return { score, signals };
+}
+
 function detectEmotion(message, mode) {
   const normalized = normalizeText(message).toLowerCase();
   const safeMode = normalizeText(mode).toLowerCase();
@@ -49,24 +108,17 @@ function detectEmotion(message, mode) {
 }
 
 function detectRiskLevel(message, mode, stressLevel) {
-  const normalized = normalizeText(message).toLowerCase();
-  const safeMode = normalizeText(mode).toLowerCase();
-  const stress = Number(stressLevel || 5);
+  const { score } = scoreRiskSignals(message, mode, stressLevel);
 
-  if (CRISIS_KEYWORDS.test(normalized)) {
+  if (score >= 100) {
     return "high";
   }
 
-  if (safeMode === "panic" || stress >= 8 || PANIC_KEYWORDS.test(normalized)) {
+  if (score >= 45) {
     return "high";
   }
 
-  if (
-    stress >= 5 ||
-    SAD_KEYWORDS.test(normalized) ||
-    CONNECTION_KEYWORDS.test(normalized) ||
-    ANGRY_KEYWORDS.test(normalized)
-  ) {
+  if (score >= 18) {
     return "moderate";
   }
 
@@ -100,15 +152,16 @@ function summarizeContext(context, conversationHistory) {
 function buildSuggestions({ riskLevel, emotion }) {
   if (riskLevel === "high") {
     return [
-      "Consider speaking with a licensed mental health professional.",
+      "This is not a diagnosis. Consider speaking with a licensed mental health professional.",
       "If you might act on self-harm thoughts, call local emergency services or a crisis line now.",
-      "Move to a safer space and contact a trusted person immediately.",
+      "Reach out to a trusted contact and move to a safer space immediately.",
     ];
   }
 
   if (riskLevel === "moderate") {
     return [
-      "Consider speaking with a licensed mental health professional.",
+      "This is not a diagnosis. Consider speaking with a licensed mental health professional.",
+      "A counselor or therapist can help you build a safer support plan.",
       "Share this with someone you trust if it feels safe.",
       emotion === "sleep"
         ? "Try a calm bedtime routine and keep the next step very small."
@@ -118,9 +171,78 @@ function buildSuggestions({ riskLevel, emotion }) {
 
   return [
     "Use a short breathing reset or grounding pause.",
-    "Hydrate, stretch, and keep the next step small.",
-    "If you want, tell me one thing that feels hardest right now.",
+    "Hydrate, journal for a few minutes, and keep the next step small.",
+    "Try a sleep hygiene check: dim lights, reduce screens, and settle into a quiet routine.",
   ];
+}
+
+function buildDoctorSuggestion({ riskLevel }) {
+  if (riskLevel === "high") {
+    return {
+      level: "high",
+      title: "Urgent professional support recommended",
+      recommendation:
+        "This is not a diagnosis. Consider speaking with a licensed mental health professional. If you may act on self-harm thoughts, call local emergency services or a crisis line now.",
+    };
+  }
+
+  if (riskLevel === "moderate") {
+    return {
+      level: "moderate",
+      title: "Therapist or counselor suggestion",
+      recommendation:
+        "This is not a diagnosis. Consider speaking with a licensed mental health professional. A therapist or counselor can help you build a safer support plan.",
+    };
+  }
+
+  return {
+    level: "low",
+    title: "Self-help only",
+    recommendation:
+      "Use self-care first: hydrate, journal, breathe slowly, and keep a steady sleep routine. This is not a diagnosis. Consider speaking with a licensed mental health professional if things persist.",
+  };
+}
+
+function buildMeditationSuggestion({ riskLevel, emotion, message }) {
+  const normalized = normalizeText(message).toLowerCase();
+
+  if (riskLevel === "high" || emotion === "panic" || /panic|anxious|overwhelmed|shaking|breathless/.test(normalized)) {
+    return {
+      type: "grounding",
+      durationMinutes: 5,
+      reason: "Grounding helps reduce panic-style arousal first, then professional support can follow if needed.",
+    };
+  }
+
+  if (emotion === "sleep" || /sleep|insomnia|tired|restless|nightmare/.test(normalized)) {
+    return {
+      type: "sleep",
+      durationMinutes: 5,
+      reason: "A body-scan sleep meditation can help settle the nervous system and support rest.",
+    };
+  }
+
+  if (/sad|down|empty|cry|hopeless|lonely/.test(normalized)) {
+    return {
+      type: "gratitude",
+      durationMinutes: 5,
+      reason: "Gratitude or journaling meditation can gently shift focus when sadness is present.",
+    };
+  }
+
+  if (/stress|stressed|pressure|tense|burned out|burnout/.test(normalized)) {
+    return {
+      type: "breathing",
+      durationMinutes: 5,
+      reason: "Breathing meditation is a lightweight way to reduce stress without overwhelming the user.",
+    };
+  }
+
+  return {
+    type: "body-scan",
+    durationMinutes: 5,
+    reason: "A short body-scan gives a calm, low-effort reset for general emotional overload.",
+  };
 }
 
 function buildReply({ message, mode, riskLevel, emotion, context, conversationHistory }) {
@@ -179,6 +301,12 @@ function buildFallbackReply(payload = {}) {
   const emotion = detectEmotion(payload.message, payload.mode);
   const riskLevel = detectRiskLevel(payload.message, payload.mode, payload.stressLevel);
   const suggestions = buildSuggestions({ riskLevel, emotion });
+  const doctorSuggestion = buildDoctorSuggestion({ riskLevel });
+  const meditationSuggestion = buildMeditationSuggestion({
+    riskLevel,
+    emotion,
+    message: payload.message,
+  });
   const reply = buildReply({
     message: payload.message,
     mode: payload.mode,
@@ -193,6 +321,8 @@ function buildFallbackReply(payload = {}) {
     emotion,
     riskLevel,
     suggestions,
+    doctorSuggestion,
+    meditationSuggestion,
   };
 }
 
