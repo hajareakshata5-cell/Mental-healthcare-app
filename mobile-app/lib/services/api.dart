@@ -20,9 +20,9 @@ class ApiClient {
 
   // Configure at build time with --dart-define=API_BASE_URL=https://api.example.com
   // Defaults are chosen based on platform to support emulators and simulators
-  String _envBase =
+  final String _envBase =
       const String.fromEnvironment('API_BASE_URL', defaultValue: '');
-  String _envAiBase =
+  final String _envAiBase =
       const String.fromEnvironment('AI_BASE_URL', defaultValue: '');
 
   // Will be initialized in the private constructor to avoid using `this` in
@@ -210,14 +210,21 @@ class ApiClient {
   Future<Map<String, dynamic>> chatWithAi(
     String message, {
     int stressLevel = 5,
+    String mode = 'support',
+    String? userId,
+    Object? context,
     List<String> conversationHistory = const [],
   }) async {
     final response = await postAi('/api/v1/chat/respond', body: {
       'message': message,
+      'mode': mode,
+      if (userId != null) 'userId': userId,
+      if (context != null) 'context': context,
       'stress_level': stressLevel,
       'conversation_history': conversationHistory,
     });
-    if (response['reply'] is String && response['reply'].toString().isNotEmpty) {
+    if (response['reply'] is String &&
+        response['reply'].toString().isNotEmpty) {
       return response;
     }
 

@@ -14,6 +14,7 @@ import 'features/detox/digital_detox_tab.dart';
 import 'features/premium/advanced_premium_tab.dart';
 import 'features/sleep/sleep_system_tab.dart';
 import 'features/sound/sound_therapy_tab.dart';
+import 'ui/app_layout.dart';
 import 'ui/premium_kit.dart';
 
 class MentalHealthApp extends StatelessWidget {
@@ -381,6 +382,7 @@ class _AppRootState extends State<AppRoot> {
 
     return Scaffold(
       extendBody: true,
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -1090,7 +1092,7 @@ class _MoodTabState extends State<MoodTab> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: appTabPadding(context),
       children: [
         const PremiumCard(
           child: Column(
@@ -1222,8 +1224,25 @@ class AiSupportTab extends StatefulWidget {
 class _AiSupportTabState extends State<AiSupportTab> {
   final _input = TextEditingController();
   final _scrollController = ScrollController();
-  final List<Map<String, String>> _messages = [
-    {'role': 'AI', 'text': 'I am here with you. Share what is on your mind.'},
+  final List<Map<String, dynamic>> _messages = [
+    {
+      'role': 'AI',
+      'text': 'I am here with you. Share what is on your mind.',
+      'emotion': 'supportive',
+      'riskLevel': 'low',
+      'suggestions': <String>['You can start with one sentence.'],
+      'doctorSuggestion': {
+        'title': 'Self-help only',
+        'recommendation':
+            'Use self-care first: hydrate, journal, breathe slowly, and keep a steady sleep routine. This is not a diagnosis. Consider speaking with a licensed mental health professional if things persist.',
+      },
+      'meditationSuggestion': {
+        'type': 'body-scan',
+        'durationMinutes': 5,
+        'reason':
+            'A short body-scan gives a calm, low-effort reset for general emotional overload.',
+      },
+    },
   ];
   String _voiceMode = 'support';
   bool _busy = false;
@@ -1252,38 +1271,213 @@ class _AiSupportTabState extends State<AiSupportTab> {
     if (text.isEmpty) return;
     setState(() {
       _messages.add({'role': 'You', 'text': text});
+      _messages.add({'role': 'AI', 'loading': true});
       _input.clear();
       _busy = true;
     });
     try {
       final response = await ApiClient.instance.chatWithAi(
         text,
+        mode: _voiceMode,
+        context: const {
+          'screen': 'support_chat',
+          'flow': 'original_mindcare',
+        },
         stressLevel: 5,
         conversationHistory: _messages
             .map((m) => '${m['role']}: ${m['text']}')
             .toList(growable: false),
       );
-      final reply = (response['response'] ??
-              response['reply'] ??
-              response['message'] ??
-              response['text'] ??
-              response['summary'] ??
-              response['result'] ??
-              response.toString())
-          .toString();
+
+      final normalized = _normalizeAssistantResponse(text, response);
       if (!mounted) return;
       setState(() {
-        _messages.add({'role': 'AI', 'text': reply});
+        _messages.removeWhere((entry) => entry['loading'] == true);
+        _messages.add(normalized);
       });
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _messages.add({'role': 'System', 'text': 'Chat service error: $e'});
+        _messages.removeWhere((entry) => entry['loading'] == true);
+        _messages.add({
+          'role': 'System',
+          'text': 'Chat service error: $e',
+        });
       });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Map<String, dynamic> _normalizeAssistantResponse(
+    String message,
+    Map<String, dynamic> response,
+  ) {
+    final reply = (response['reply'] ??
+            response['response'] ??
+            response['message'] ??
+            response['text'] ??
+            response['summary'] ??
+            response['result'] ??
+            response.toString())
+        .toString();
+    final emotion = (response['emotion'] ?? _detectEmotion(message)).toString();
+    final riskLevel = (response['riskLevel'] ?? _detectRiskLevel(message))
+        .toString();
+    final suggestions = _toStringList(response['suggestions']);
+    final doctorSuggestion = _asMap(response['doctorSuggestion']) ??
+        _buildDoctorSuggestion(riskLevel);
+    final meditationSuggestion = _asMap(response['meditationSuggestion']) ??
+        _buildMeditationSuggestion(message, emotion, riskLevel);
+
+    return {
+      'role': 'AI',
+      'text': reply,
+      'emotion': emotion,
+      'riskLevel': riskLevel,
+      'suggestions': suggestions.isNotEmpty
+          ? suggestions
+          : _defaultSuggestions(riskLevel, emotion),
+      'doctorSuggestion': doctorSuggestion,
+      'meditationSuggestion': meditationSuggestion,
+    };
+  }
+
+  Map<String, dynamic> _buildDoctorSuggestion(String riskLevel) {
+    switch (riskLevel.toLowerCase()) {
+      case 'high':
+        return {
+          'title': 'Urgent professional support recommended',
+          'recommendation':
+              'This is not a diagnosis. Consider speaking with a licensed mental health professional. If you may act on self-harm thoughts, call local emergency services or a crisis line now.',
+        };
+      case 'moderate':
+        return {
+          'title': 'Therapist or counselor suggestion',
+          'recommendation':
+              'This is not a diagnosis. Consider speaking with a licensed mental health professional. A counselor or therapist can help you build a safer support plan.',
+        };
+      default:
+        return {
+          'title': 'Self-help only',
+          'recommendation':
+              'Use self-care first: hydrate, journal, breathe slowly, and keep a steady sleep routine. This is not a diagnosis. Consider speaking with a licensed mental health professional if things persist.',
+        };
+    }
+  }
+
+  Map<String, dynamic> _buildMeditationSuggestion(
+    String message,
+    String emotion,
+    String riskLevel,
+  ) {
+    final lower = message.toLowerCase();
+    if (riskLevel.toLowerCase() == 'high' || emotion == 'panic') {
+      return {
+        'type': 'grounding',
+        'durationMinutes': 5,
+        'reason':
+            'Grounding helps reduce panic-style arousal first, then professional support can follow if needed.',
+      };
+    }
+    if (emotion == 'sleep' || lower.contains('sleep') || lower.contains('tired')) {
+      return {
+        'type': 'sleep',
+        'durationMinutes': 5,
+        'reason':
+            'A body-scan sleep meditation can help settle the nervous system and support rest.',
+      };
+    }
+    if (lower.contains('sad') || lower.contains('empty') || lower.contains('hopeless')) {
+      return {
+        'type': 'gratitude',
+        'durationMinutes': 5,
+        'reason':
+            'Gratitude or journaling meditation can gently shift focus when sadness is present.',
+      };
+    }
+    if (lower.contains('stress') || lower.contains('anxious') || lower.contains('tense')) {
+      return {
+        'type': 'breathing',
+        'durationMinutes': 5,
+        'reason':
+            'Breathing meditation is a lightweight way to reduce stress without overwhelming the user.',
+      };
+    }
+    return {
+      'type': 'body-scan',
+      'durationMinutes': 5,
+      'reason': 'A short body-scan gives a calm, low-effort reset for general emotional overload.',
+    };
+  }
+
+  List<String> _defaultSuggestions(String riskLevel, String emotion) {
+    switch (riskLevel.toLowerCase()) {
+      case 'high':
+        return [
+          'This is not a diagnosis. Consider speaking with a licensed mental health professional.',
+          'If you might act on self-harm thoughts, call local emergency services or a crisis line now.',
+        ];
+      case 'moderate':
+        return [
+          'This is not a diagnosis. Consider speaking with a licensed mental health professional.',
+          'A counselor or therapist can help you build a safer support plan.',
+          emotion == 'sleep'
+              ? 'Try a calm bedtime routine and keep the next step very small.'
+              : 'Use a short breathing or grounding exercise for 3 minutes.',
+        ];
+      default:
+        return [
+          'Use a short breathing reset or grounding pause.',
+          'Hydrate, journal for a few minutes, and keep the next step small.',
+          'Try a sleep hygiene check: dim lights, reduce screens, and settle into a quiet routine.',
+        ];
+    }
+  }
+
+  List<String> _toStringList(Object? value) {
+    if (value is List) {
+      return value
+          .map((entry) => entry.toString().trim())
+          .where((entry) => entry.isNotEmpty)
+          .toList(growable: false);
+    }
+    return const <String>[];
+  }
+
+  Map<String, dynamic>? _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((key, val) => MapEntry(key.toString(), val));
+    return null;
+  }
+
+  String _detectEmotion(String message) {
+    final lower = message.toLowerCase();
+    if (_voiceMode == 'sleep' || lower.contains('sleep') || lower.contains('tired')) {
+      return 'sleep';
+    }
+    if (_voiceMode == 'panic' || lower.contains('panic') || lower.contains('anxious')) {
+      return 'panic';
+    }
+    if (_voiceMode == 'grounding') {
+      return 'grounding';
+    }
+    return 'supportive';
+  }
+
+  String _detectRiskLevel(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('suicide') || lower.contains('kill myself') || lower.contains('self-harm')) {
+      return 'high';
+    }
+    if (_voiceMode == 'panic' || lower.contains('panic') || lower.contains('overwhelmed')) {
+      return 'high';
+    }
+    if (_voiceMode == 'sleep' || lower.contains('sad') || lower.contains('lonely') || lower.contains('angry')) {
+      return 'moderate';
+    }
+    return 'low';
   }
 
   Future<void> _sendVoice() async {
@@ -1409,19 +1603,20 @@ class _AiSupportTabState extends State<AiSupportTab> {
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
-            padding: EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              MediaQuery.of(context).padding.bottom +
-                  MediaQuery.of(context).viewInsets.bottom +
-                  160,
+            padding: appTabPadding(
+              context,
+              top: 8,
+              baseBottom: 28,
+              bottomNavBuffer: 96,
+              extraBottom: 180,
             ),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             itemCount: _messages.length,
             itemBuilder: (context, i) {
               final msg = _messages[i];
               final user = msg['role'] == 'You';
+              final loading = msg['loading'] == true;
+              final system = msg['role'] == 'System';
               return Align(
                 alignment: user ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
@@ -1447,33 +1642,120 @@ class _AiSupportTabState extends State<AiSupportTab> {
                       bottomRight: Radius.circular(user ? 4 : 18),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: user
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        msg['role'] ?? '',
-                        style: TextStyle(
-                          color: user
-                              ? Colors.white70
-                              : Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                    child: loading
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  user
+                                      ? Colors.white
+                                      : Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Thinking…',
+                              style: TextStyle(
+                                color: user
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        )
+                        : Column(
+                          crossAxisAlignment: user
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              msg['role'] ?? '',
+                              style: TextStyle(
+                                color: user
+                                    ? Colors.white70
+                                    : Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              msg['text'] ?? '',
+                              style: TextStyle(
+                                color: user
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                                height: 1.35,
+                              ),
+                            ),
+                            if (!user) ...[
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _MiniChip(
+                                    label:
+                                        'Emotion: ${(msg['emotion'] ?? 'supportive').toString()}',
+                                    color: const Color(0xFF155E75),
+                                  ),
+                                  _MiniChip(
+                                    label:
+                                        'Risk level: ${(msg['riskLevel'] ?? 'low').toString()}',
+                                    color: const Color(0xFF0F766E),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              _GuideBlock(
+                                title: 'Doctor / therapist suggestion',
+                                text: (msg['doctorSuggestion'] as Map?)?['recommendation']
+                                        ?.toString() ??
+                                    'This is not a diagnosis. Consider speaking with a licensed mental health professional.',
+                              ),
+                              const SizedBox(height: 8),
+                              _GuideBlock(
+                                title: 'Meditation suggestion',
+                                text: _meditationSummary(msg['meditationSuggestion']),
+                              ),
+                              if ((msg['suggestions'] as List?)?.isNotEmpty == true) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final suggestion in msg['suggestions'] as List)
+                                      _MiniChip(
+                                        label: suggestion.toString(),
+                                        color: const Color(0xFFF59E0B),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                            if (system) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Try again in a moment. If this keeps happening, the backend may be offline.',
+                                style: TextStyle(
+                                  color: user
+                                      ? Colors.white70
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        msg['text'] ?? '',
-                        style: TextStyle(
-                          color: user
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurface,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               );
             },
@@ -1521,6 +1803,17 @@ class _AiSupportTabState extends State<AiSupportTab> {
         )
       ],
     );
+  }
+
+  String _meditationSummary(Object? meditation) {
+    final data = _asMap(meditation);
+    if (data == null) {
+      return 'Recommended: 5 min grounding meditation because your message suggests anxiety/stress.';
+    }
+    final type = (data['type'] ?? 'body-scan').toString();
+    final duration = (data['durationMinutes'] ?? 5).toString();
+    final reason = (data['reason'] ?? 'calm reset').toString();
+    return 'Recommended: $duration min $type meditation because $reason';
   }
 }
 
@@ -1652,7 +1945,7 @@ class _ConnectTabState extends State<ConnectTab> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: appTabPadding(context),
       children: [
         PremiumCard(
           child: Column(
@@ -1854,7 +2147,7 @@ class _WellnessTabState extends State<WellnessTab> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: appTabPadding(context),
       children: [
         PremiumCard(
           child: Column(
@@ -2079,7 +2372,7 @@ class _PremiumTabState extends State<PremiumTab> {
     final callAccess = _subscription?['callAccess'];
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: appTabPadding(context),
       children: [
         Card(
           child: Padding(
@@ -2138,6 +2431,67 @@ class _PremiumTabState extends State<PremiumTab> {
               ),
             )),
       ],
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _GuideBlock extends StatelessWidget {
+  const _GuideBlock({required this.title, required this.text});
+
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0x220F766E)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            text,
+            style: const TextStyle(height: 1.35),
+          ),
+        ],
+      ),
     );
   }
 }
