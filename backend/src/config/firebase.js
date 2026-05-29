@@ -1,19 +1,32 @@
 const admin = require("firebase-admin");
-const path = require("path");
 
-const serviceAccount = require(path.join(
-  __dirname,
-  "../../firebase-service-account.json"
-));
+let messaging = null;
+let firestore = null;
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+try {
+  const hasFirebaseEnv =
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY;
+
+  if (hasFirebaseEnv && !admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      }),
+    });
+
+    messaging = admin.messaging();
+    firestore = admin.firestore();
+    console.log("[firebase] Admin initialized from env");
+  } else {
+    console.log("[firebase] Admin disabled: env vars missing");
+  }
+} catch (error) {
+  console.warn("[firebase] Admin init skipped:", error.message);
 }
-
-const messaging = admin.messaging();
-const firestore = admin.firestore();
 
 module.exports = {
   admin,
