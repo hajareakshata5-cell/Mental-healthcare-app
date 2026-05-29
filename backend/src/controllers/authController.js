@@ -10,7 +10,9 @@ const {
 } = require("../services/tokenService");
 
 function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+  return String(email || "")
+    .trim()
+    .toLowerCase();
 }
 
 function randomAlias() {
@@ -67,7 +69,9 @@ const register = asyncHandler(async (req, res) => {
 
   const normalizedEmail = normalizeEmail(email);
 
-  const existing = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] });
+  const existing = await User.findOne({
+    $or: [{ email: normalizedEmail }, { username }],
+  });
   if (existing) {
     throw new ApiError(
       409,
