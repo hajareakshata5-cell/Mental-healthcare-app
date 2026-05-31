@@ -43,10 +43,7 @@ const userSchema = new mongoose.Schema(
   default: "unknown",
 },
 
-isOnlineForMatching: {
-  type: Boolean,
-  default: false,
-},
+
 
 lastSeenForMatchingAt: {
   type: Date,
@@ -219,6 +216,10 @@ lastSeenForMatchingAt: {
       default: "user",
     },
 
+    isOnlineForMatching: {
+      type: Boolean,
+      default: false,
+  },
     isActive: {
       type: Boolean,
       default: true,

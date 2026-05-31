@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 const ChatMessage = require("../models/ChatMessage");
 const CallLog = require("../models/CallLog");
+const User = require("../models/User");
 const onlineUsers = new Map();
 const matchmakingQueue = [];
 const crypto = require("crypto");
@@ -66,6 +67,12 @@ function registerSocketHandlers(server, allowedOrigins) {
         status: "online",
         lastSeenAt: new Date().toISOString(),
       });
+      if (socket.data.userId) {
+      User.findByIdAndUpdate(socket.data.userId, {
+      isOnlineForMatching: true,
+      lastSeenForMatchingAt: new Date(),
+     }).catch(console.error);
+    }
       io.emit("online-users", Array.from(onlineUsers.values()));
       io.to(safeRoomId).emit("presence", { alias: safeAlias, state: "joined" });
     });
@@ -297,6 +304,10 @@ function registerSocketHandlers(server, allowedOrigins) {
 
     socket.on("disconnect", () => {
       if (socket.data.userId) {
+        User.findByIdAndUpdate(socket.data.userId, {
+  isOnlineForMatching: false,
+  lastSeenForMatchingAt: new Date(),
+}).catch(console.error);
         const current = onlineUsers.get(socket.data.userId);
         if (current) {
           onlineUsers.set(socket.data.userId, {
