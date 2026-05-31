@@ -19,6 +19,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^2.7.0",
+    "agora-access-token": "^2.0.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

@@ -1,3 +1,7 @@
+const {
+  RtcTokenBuilder,
+  RtcRole,
+} = require("agora-access-token");
 const CallLog = require("../models/CallLog");
 const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
@@ -58,6 +62,29 @@ const randomMatch = asyncHandler(async (req, res) => {
     },
   });
 });
+function buildAgoraToken(channelName, userId) {
+  const appId = process.env.AGORA_APP_ID;
+  const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+
+  if (!appId || !appCertificate) {
+    return "";
+  }
+
+  const uid = 0;
+  const role = RtcRole.PUBLISHER;
+  const expireSeconds = 60 * 60;
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  const privilegeExpiredTs = currentTimestamp + expireSeconds;
+
+  return RtcTokenBuilder.buildTokenWithUid(
+    appId,
+    appCertificate,
+    channelName,
+    uid,
+    role,
+    privilegeExpiredTs,
+  );
+}
 const startCall = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
 
@@ -97,6 +124,7 @@ const startCall = asyncHandler(async (req, res) => {
   }
 
   const channelName = `mindcare_${updatedUser._id}_${Date.now()}`;
+  const agoraToken = buildAgoraToken(channelName, updatedUser._id.toString());
 
   const callLog = await CallLog.create({
     userId: updatedUser._id,
@@ -106,7 +134,9 @@ const startCall = asyncHandler(async (req, res) => {
     status: "connected",
     isFreeTier,
     channelName,
+    agoraToken,
     targetUserId,
+    
   });
 
   if (targetUserId) {
@@ -135,6 +165,7 @@ const startCall = asyncHandler(async (req, res) => {
               updatedUser.anonymousAlias ||
               "MindCare user",
             channelName,
+            agoraToken,
             callType: type,
           },
         });
@@ -156,6 +187,7 @@ const startCall = asyncHandler(async (req, res) => {
       status: callLog.status,
       peerAlias: callLog.peerAlias,
       channelName,
+      agoraToken,
       targetUserId,
     },
     user: {
