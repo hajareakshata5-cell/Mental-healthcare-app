@@ -52,6 +52,11 @@ function registerSocketHandlers(server, allowedOrigins) {
       const safeRoomId = sanitizeAlias(roomId, socket.id);
       const safeAlias = sanitizeAlias(alias, `anon_${socket.id.slice(0, 6)}`);
       const safeUserId = sanitizeAlias(userId, socket.id);
+      console.log("[socket] join-room", {
+  userId: safeUserId,
+  alias: safeAlias,
+  socketId: socket.id,
+});
 
       removeQueueEntries(
         (entry) => entry.userId === safeUserId || entry.socketId === socket.id,
@@ -72,6 +77,7 @@ function registerSocketHandlers(server, allowedOrigins) {
       isOnlineForMatching: true,
       lastSeenForMatchingAt: new Date(),
      }).catch(console.error);
+     console.log("[socket] online-for-matching true", safeUserId);
     }
       io.emit("online-users", Array.from(onlineUsers.values()));
       io.to(safeRoomId).emit("presence", { alias: safeAlias, state: "joined" });
@@ -308,6 +314,10 @@ function registerSocketHandlers(server, allowedOrigins) {
   isOnlineForMatching: false,
   lastSeenForMatchingAt: new Date(),
 }).catch(console.error);
+console.log(
+  "[socket] online-for-matching false",
+  socket.data.userId,
+);
         const current = onlineUsers.get(socket.data.userId);
         if (current) {
           onlineUsers.set(socket.data.userId, {
