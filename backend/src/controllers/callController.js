@@ -5,6 +5,59 @@ const ApiError = require("../utils/ApiError");
 const { canStartCall } = require("../services/callPolicyService");
 const { sendPushNotification } = require("../services/notificationService");
 
+const randomMatch = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select("-passwordHash");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const gender = (req.body.gender || "any").toString().toLowerCase();
+
+  const query = {
+    _id: { $ne: user._id },
+    isActive: true,
+    isOnlineForMatching: true,
+    "privacy.allowAnonymousMatching": { $ne: false },
+  };
+
+  if (gender === "male" || gender === "female") {
+    query.gender = gender;
+  }
+
+  const candidates = await User.aggregate([
+    { $match: query },
+    { $sample: { size: 1 } },
+    {
+      $project: {
+        _id: 1,
+        username: 1,
+        displayName: 1,
+        anonymousAlias: 1,
+        gender: 1,
+      },
+    },
+  ]);
+
+  if (!candidates.length) {
+    throw new ApiError(404, "No online co-learner available right now");
+  }
+
+  const peer = candidates[0];
+
+  return res.status(200).json({
+    success: true,
+    peer: {
+      id: peer._id,
+      name:
+        peer.displayName ||
+        peer.username ||
+        peer.anonymousAlias ||
+        "Co-learner",
+      gender: peer.gender || "unknown",
+    },
+  });
+});
 const startCall = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
 
@@ -219,6 +272,7 @@ const getCallProgress = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  randomMatch,
   startCall,
   endCall,
   getCallHistory,

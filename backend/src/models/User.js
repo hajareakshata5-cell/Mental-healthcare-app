@@ -37,6 +37,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    gender: {
+  type: String,
+  enum: ["male", "female", "other", "any", "unknown"],
+  default: "unknown",
+},
+
+isOnlineForMatching: {
+  type: Boolean,
+  default: false,
+},
+
+lastSeenForMatchingAt: {
+  type: Date,
+},
 
     avatarUrl: {
       type: String,
