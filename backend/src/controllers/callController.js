@@ -62,7 +62,15 @@ const randomMatch = asyncHandler(async (req, res) => {
     },
   });
 });
-function buildAgoraToken(channelName, userId) {
+function agoraUidFromUserId(userId) {
+  const raw = String(userId || "1").replace(/[^a-fA-F0-9]/g, "");
+  const shortHex = raw.slice(-8) || "1";
+  const uid = parseInt(shortHex, 16);
+
+  return Number.isFinite(uid) && uid > 0 ? uid : 1;
+}
+
+function buildAgoraToken(channelName, uid) {
   const appId = process.env.AGORA_APP_ID;
   const appCertificate = process.env.AGORA_APP_CERTIFICATE;
 
@@ -70,20 +78,19 @@ function buildAgoraToken(channelName, userId) {
     return "";
   }
 
-  
   const role = RtcRole.PUBLISHER;
   const expireSeconds = 60 * 60;
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const privilegeExpiredTs = currentTimestamp + expireSeconds;
 
-  return RtcTokenBuilder.buildTokenWithAccount(
-  appId,
-  appCertificate,
-  channelName,
-  "mindcare_user",
-  role,
-  privilegeExpiredTs,
-);
+  return RtcTokenBuilder.buildTokenWithUid(
+    appId,
+    appCertificate,
+    channelName,
+    uid,
+    role,
+    privilegeExpiredTs,
+  );
 }
 const startCall = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
@@ -124,8 +131,14 @@ const startCall = asyncHandler(async (req, res) => {
   }
 
   const channelName = `mindcare_${updatedUser._id}_${Date.now()}`;
-  const agoraToken = buildAgoraToken(channelName, updatedUser._id.toString());
 
+const callerAgoraUid = agoraUidFromUserId(updatedUser._id);
+const callerAgoraToken = buildAgoraToken(channelName, callerAgoraUid);
+
+const receiverAgoraUid = targetUserId ? agoraUidFromUserId(targetUserId) : 0;
+const receiverAgoraToken = targetUserId
+  ? buildAgoraToken(channelName, receiverAgoraUid)
+  : "";
   const callLog = await CallLog.create({
     userId: updatedUser._id,
     peerAlias,
@@ -134,7 +147,6 @@ const startCall = asyncHandler(async (req, res) => {
     status: "connected",
     isFreeTier,
     channelName,
-    agoraToken,
     targetUserId,
     
   });
@@ -165,8 +177,9 @@ const startCall = asyncHandler(async (req, res) => {
               updatedUser.anonymousAlias ||
               "MindCare user",
             channelName,
-            agoraToken,
-            callType: type,
+agoraToken: receiverAgoraToken,
+agoraUid: String(receiverAgoraUid),
+callType: type,
           },
         });
       } catch (error) {
@@ -187,8 +200,9 @@ const startCall = asyncHandler(async (req, res) => {
       status: callLog.status,
       peerAlias: callLog.peerAlias,
       channelName,
-      agoraToken,
-      targetUserId,
+agoraToken: callerAgoraToken,
+agoraUid: callerAgoraUid,
+targetUserId,
     },
     user: {
       id: updatedUser._id,
