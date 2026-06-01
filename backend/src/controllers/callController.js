@@ -65,9 +65,13 @@ const randomMatch = asyncHandler(async (req, res) => {
 function agoraUidFromUserId(userId) {
   const raw = String(userId || "1").replace(/[^a-fA-F0-9]/g, "");
   const shortHex = raw.slice(-8) || "1";
-  const uid = parseInt(shortHex, 16);
+  const parsed = parseInt(shortHex, 16);
 
-  return Number.isFinite(uid) && uid > 0 ? uid : 1;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+
+  return (parsed % 2000000000) + 1;
 }
 
 function buildAgoraToken(channelName, uid) {
@@ -139,6 +143,15 @@ const receiverAgoraUid = targetUserId ? agoraUidFromUserId(targetUserId) : 0;
 const receiverAgoraToken = targetUserId
   ? buildAgoraToken(channelName, receiverAgoraUid)
   : "";
+  console.log("[agora] token-debug", {
+  channelName,
+  callerAgoraUid,
+  receiverAgoraUid,
+  callerTokenLength: callerAgoraToken.length,
+  receiverTokenLength: receiverAgoraToken.length,
+  hasAppId: Boolean(process.env.AGORA_APP_ID),
+  hasCertificate: Boolean(process.env.AGORA_APP_CERTIFICATE),
+});
   const callLog = await CallLog.create({
     userId: updatedUser._id,
     peerAlias,
