@@ -70,20 +70,20 @@ function buildAgoraToken(channelName, userId) {
     return "";
   }
 
-  const uid = 0;
+  
   const role = RtcRole.PUBLISHER;
   const expireSeconds = 60 * 60;
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const privilegeExpiredTs = currentTimestamp + expireSeconds;
 
-  return RtcTokenBuilder.buildTokenWithUid(
-    appId,
-    appCertificate,
-    channelName,
-    uid,
-    role,
-    privilegeExpiredTs,
-  );
+  return RtcTokenBuilder.buildTokenWithAccount(
+  appId,
+  appCertificate,
+  channelName,
+  "mindcare_user",
+  role,
+  privilegeExpiredTs,
+);
 }
 const startCall = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
