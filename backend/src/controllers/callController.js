@@ -134,7 +134,11 @@ const startCall = asyncHandler(async (req, res) => {
     }
   }
 
-  const channelName = `mindcare_${updatedUser._id}_${Date.now()}`;
+  const channelName = targetUserId
+  ? `mindcare_pair_${[updatedUser._id.toString(), targetUserId.toString()]
+      .sort()
+      .join("_")}`
+  : `mindcare_${updatedUser._id}_${Date.now()}`;
 
 const callerAgoraUid = agoraUidFromUserId(updatedUser._id);
 const callerAgoraToken = buildAgoraToken(channelName, callerAgoraUid);
