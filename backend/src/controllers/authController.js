@@ -83,29 +83,59 @@ function buildAuthResponse(user, tokens) {
 
 const register = asyncHandler(async (req, res) => {
   const { email, password, username, displayName } = req.body;
+
   if (!email || !password || !username) {
     throw new ApiError(400, "email, password and username are required");
   }
 
   const normalizedEmail = normalizeEmail(email);
+  const cleanUsername = String(username).trim();
 
-  const existing = await User.findOne({
-    $or: [{ email: normalizedEmail }, { username }],
-  });
+  if (cleanUsername.length < 3) {
+    throw new ApiError(400, "username must be at least 3 characters");
+  }
 
-  if (existing) {
+  const existing = await User.findOne({ email: normalizedEmail });
+
+  if (existing && existing.emailVerified) {
     throw new ApiError(
       409,
-      "User already exists with provided email or username",
+      "This email is already registered. Please sign in.",
     );
+  }
+
+  if (existing && !existing.emailVerified) {
+    existing.username = cleanUsername;
+    existing.displayName = displayName || cleanUsername;
+    existing.passwordHash = await bcrypt.hash(password, 12);
+    existing.authProvider = "email";
+    if (!existing.anonymousAlias) {
+      existing.anonymousAlias = randomAlias();
+    }
+
+    try {
+      await setAndSendEmailOtp(existing);
+    } catch (error) {
+      throw new ApiError(
+        500,
+        "Verification email could not be sent. Please try again.",
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      requiresVerification: true,
+      email: existing.email,
+      message: "Verification OTP sent to your email",
+    });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await User.create({
     email: normalizedEmail,
-    username,
-    displayName,
+    username: cleanUsername,
+    displayName: displayName || cleanUsername,
     passwordHash,
     authProvider: "email",
     anonymousAlias: randomAlias(),
@@ -126,7 +156,7 @@ const register = asyncHandler(async (req, res) => {
     await Subscription.deleteOne({ userId: user._id });
     throw new ApiError(
       500,
-      "Account created failed because verification email could not be sent",
+      "Account creation failed because verification email could not be sent",
     );
   }
 
@@ -137,7 +167,6 @@ const register = asyncHandler(async (req, res) => {
     message: "Verification OTP sent to your email",
   });
 });
-
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {

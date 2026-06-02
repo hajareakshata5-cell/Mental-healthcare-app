@@ -45,10 +45,9 @@ const userSchema = new mongoose.Schema(
       default: "guest",
     },
 
-    username: {
+       username: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       minlength: 3,
     },
