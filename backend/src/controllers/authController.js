@@ -115,18 +115,27 @@ const register = asyncHandler(async (req, res) => {
 
       try {
     await setAndSendEmailOtp(existing);
-  } catch (error) {
+    } catch (error) {
     console.error("OTP_EMAIL_SEND_FAILED_EXISTING_USER", {
       message: error.message,
       code: error.code,
       command: error.command,
       response: error.response,
+      name: error.name,
     });
 
-    throw new ApiError(
-      500,
-      "Verification email could not be sent. Please try again.",
-    );
+    return res.status(500).json({
+      success: false,
+      message: "Verification email could not be sent. Please try again.",
+      debug: {
+        stage: "existing_user_set_and_send_otp",
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+      },
+    });
   }
     return res.status(200).json({
       success: true,
@@ -157,20 +166,30 @@ const register = asyncHandler(async (req, res) => {
 
     try {
     await setAndSendEmailOtp(user);
-  } catch (error) {
+    } catch (error) {
     console.error("OTP_EMAIL_SEND_FAILED_NEW_USER", {
       message: error.message,
       code: error.code,
       command: error.command,
       response: error.response,
+      name: error.name,
     });
 
     await User.findByIdAndDelete(user._id);
     await Subscription.deleteOne({ userId: user._id });
-    throw new ApiError(
-      500,
-      "Account creation failed because verification email could not be sent",
-    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Account creation failed because verification email could not be sent",
+      debug: {
+        stage: "new_user_set_and_send_otp",
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+      },
+    });
   }
 
   res.status(201).json({
