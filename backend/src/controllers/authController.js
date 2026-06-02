@@ -298,6 +298,52 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
+const debugSendOtpEmail = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "email is required");
+  }
+
+  try {
+    await sendVerificationOtpEmail({
+      to: normalizeEmail(email),
+      otp: "123456",
+      username: "Debug User",
+    });
+
+    res.json({
+      success: true,
+      message: "Debug email sent successfully",
+      smtp: {
+        host: process.env.SMTP_HOST ? "YES" : "NO",
+        port: process.env.SMTP_PORT || null,
+        user: process.env.SMTP_USER ? "YES" : "NO",
+        pass: process.env.SMTP_PASS ? "YES" : "NO",
+        from: process.env.SMTP_FROM ? "YES" : "NO",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Debug email failed",
+      smtp: {
+        host: process.env.SMTP_HOST ? "YES" : "NO",
+        port: process.env.SMTP_PORT || null,
+        user: process.env.SMTP_USER ? "YES" : "NO",
+        pass: process.env.SMTP_PASS ? "YES" : "NO",
+        from: process.env.SMTP_FROM ? "YES" : "NO",
+      },
+      error: {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+      },
+    });
+  }
+});
+
 const guestLogin = asyncHandler(async (req, res) => {
   let { username, alias } = req.body;
   if (!username) username = alias;
@@ -437,4 +483,5 @@ module.exports = {
   logout,
   verifyOtp,
   resendOtp,
+  debugSendOtpEmail,
 };
