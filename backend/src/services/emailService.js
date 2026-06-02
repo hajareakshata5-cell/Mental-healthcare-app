@@ -10,7 +10,7 @@ function createTransporter() {
     throw new Error("SMTP email configuration is missing");
   }
 
-  return nodemailer.createTransport({
+ return nodemailer.createTransport({
   host,
   port,
   secure: port === 465,
@@ -18,6 +18,7 @@ function createTransporter() {
     user,
     pass,
   },
+  family: 4,
   connectionTimeout: 15000,
   greetingTimeout: 10000,
   socketTimeout: 20000,
