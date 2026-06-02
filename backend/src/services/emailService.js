@@ -11,14 +11,17 @@ function createTransporter() {
   }
 
   return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: {
-      user,
-      pass,
-    },
-  });
+  host,
+  port,
+  secure: port === 465,
+  auth: {
+    user,
+    pass,
+  },
+  connectionTimeout: 15000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
+});
 }
 
 async function sendVerificationOtpEmail({ to, otp, username }) {
