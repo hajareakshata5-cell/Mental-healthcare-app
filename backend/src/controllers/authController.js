@@ -113,15 +113,21 @@ const register = asyncHandler(async (req, res) => {
       existing.anonymousAlias = randomAlias();
     }
 
-    try {
-      await setAndSendEmailOtp(existing);
-    } catch (error) {
-      throw new ApiError(
-        500,
-        "Verification email could not be sent. Please try again.",
-      );
-    }
+      try {
+    await setAndSendEmailOtp(existing);
+  } catch (error) {
+    console.error("OTP_EMAIL_SEND_FAILED_EXISTING_USER", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+    });
 
+    throw new ApiError(
+      500,
+      "Verification email could not be sent. Please try again.",
+    );
+  }
     return res.status(200).json({
       success: true,
       requiresVerification: true,
@@ -149,9 +155,16 @@ const register = asyncHandler(async (req, res) => {
     benefits: ["2 free anonymous calls"],
   });
 
-  try {
+    try {
     await setAndSendEmailOtp(user);
   } catch (error) {
+    console.error("OTP_EMAIL_SEND_FAILED_NEW_USER", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+    });
+
     await User.findByIdAndDelete(user._id);
     await Subscription.deleteOne({ userId: user._id });
     throw new ApiError(
