@@ -10,6 +10,26 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
     },
 
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerificationOtpHash: {
+      type: String,
+      default: null,
+    },
+
+    emailVerificationOtpExpiresAt: {
+      type: Date,
+      default: null,
+    },
+
+    emailVerificationOtpLastSentAt: {
+      type: Date,
+      default: null,
+    },
+
     passwordHash: { type: String },
 
     firebaseUid: {

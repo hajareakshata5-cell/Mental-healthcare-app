@@ -9,6 +9,8 @@ const {
   verifyRefreshToken,
 } = require("../services/tokenService");
 
+const { sendVerificationOtpEmail } = require("../services/emailService");
+
 function normalizeEmail(email) {
   return String(email || "")
     .trim()
@@ -17,6 +19,24 @@ function normalizeEmail(email) {
 
 function randomAlias() {
   return `anon_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function setAndSendEmailOtp(user) {
+  const otp = generateOtp();
+  user.emailVerificationOtpHash = await bcrypt.hash(otp, 10);
+  user.emailVerificationOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  user.emailVerificationOtpLastSentAt = new Date();
+  await user.save();
+
+  await sendVerificationOtpEmail({
+    to: user.email,
+    otp,
+    username: user.displayName || user.username,
+  });
 }
 
 async function ensureUniqueUsername(baseUsername) {
@@ -72,6 +92,7 @@ const register = asyncHandler(async (req, res) => {
   const existing = await User.findOne({
     $or: [{ email: normalizedEmail }, { username }],
   });
+
   if (existing) {
     throw new ApiError(
       409,
@@ -80,6 +101,7 @@ const register = asyncHandler(async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+
   const user = await User.create({
     email: normalizedEmail,
     username,
@@ -87,6 +109,7 @@ const register = asyncHandler(async (req, res) => {
     passwordHash,
     authProvider: "email",
     anonymousAlias: randomAlias(),
+    emailVerified: false,
   });
 
   await Subscription.create({
@@ -96,11 +119,23 @@ const register = asyncHandler(async (req, res) => {
     benefits: ["2 free anonymous calls"],
   });
 
-  user.lastAuthAt = new Date();
-  await user.save();
-  const tokens = issueAuthTokens(user);
+  try {
+    await setAndSendEmailOtp(user);
+  } catch (error) {
+    await User.findByIdAndDelete(user._id);
+    await Subscription.deleteOne({ userId: user._id });
+    throw new ApiError(
+      500,
+      "Account created failed because verification email could not be sent",
+    );
+  }
 
-  res.status(201).json(buildAuthResponse(user, tokens));
+  res.status(201).json({
+    success: true,
+    requiresVerification: true,
+    email: user.email,
+    message: "Verification OTP sent to your email",
+  });
 });
 
 const login = asyncHandler(async (req, res) => {
@@ -121,11 +156,104 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid credentials");
   }
 
+  if (!user.emailVerified) {
+    throw new ApiError(403, "Please verify your email before signing in");
+  }
+
   user.lastAuthAt = new Date();
   await user.save();
   const tokens = issueAuthTokens(user);
 
   res.json(buildAuthResponse(user, tokens));
+});
+
+const verifyOtp = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    throw new ApiError(400, "email and otp are required");
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user || !user.passwordHash) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (user.emailVerified) {
+    return res.json({
+      success: true,
+      verified: true,
+      message: "Email is already verified. Please sign in.",
+    });
+  }
+
+  if (
+    !user.emailVerificationOtpHash ||
+    !user.emailVerificationOtpExpiresAt ||
+    user.emailVerificationOtpExpiresAt < new Date()
+  ) {
+    throw new ApiError(400, "OTP expired. Please request a new OTP.");
+  }
+
+  const validOtp = await bcrypt.compare(
+    String(otp).trim(),
+    user.emailVerificationOtpHash,
+  );
+
+  if (!validOtp) {
+    throw new ApiError(400, "Invalid OTP");
+  }
+
+  user.emailVerified = true;
+  user.emailVerificationOtpHash = null;
+  user.emailVerificationOtpExpiresAt = null;
+  user.emailVerificationOtpLastSentAt = null;
+  await user.save();
+
+  res.json({
+    success: true,
+    verified: true,
+    message: "Email verified successfully. Please sign in.",
+  });
+});
+
+const resendOtp = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "email is required");
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user || !user.passwordHash) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (user.emailVerified) {
+    return res.json({
+      success: true,
+      verified: true,
+      message: "Email is already verified. Please sign in.",
+    });
+  }
+
+  const lastSent = user.emailVerificationOtpLastSentAt;
+  if (lastSent && Date.now() - lastSent.getTime() < 60 * 1000) {
+    throw new ApiError(429, "Please wait before requesting another OTP");
+  }
+
+  await setAndSendEmailOtp(user);
+
+  res.json({
+    success: true,
+    requiresVerification: true,
+    email: user.email,
+    message: "Verification OTP sent again",
+  });
 });
 
 const guestLogin = asyncHandler(async (req, res) => {
@@ -265,4 +393,6 @@ module.exports = {
   firebaseLogin,
   refresh,
   logout,
+  verifyOtp,
+  resendOtp,
 };
