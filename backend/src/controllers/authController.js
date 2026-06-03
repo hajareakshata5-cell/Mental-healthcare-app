@@ -301,6 +301,90 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
+const forgotPasswordSendOtp = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "email is required");
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user || !user.passwordHash || !user.emailVerified) {
+    throw new ApiError(404, "Registered email not found. Please register first.");
+  }
+
+  const lastSent = user.emailVerificationOtpLastSentAt;
+  if (lastSent && Date.now() - lastSent.getTime() < 60 * 1000) {
+    throw new ApiError(429, "Please wait before requesting another OTP");
+  }
+
+  try {
+    await setAndSendEmailOtp(user);
+  } catch (error) {
+    console.error("FORGOT_PASSWORD_OTP_SEND_FAILED", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      name: error.name,
+    });
+
+    throw new ApiError(
+      500,
+      "Password login OTP could not be sent. Please try again.",
+    );
+  }
+
+  res.json({
+    success: true,
+    requiresVerification: true,
+    email: user.email,
+    message: "Password login OTP sent to your email",
+  });
+});
+
+const forgotPasswordVerifyOtp = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    throw new ApiError(400, "email and otp are required");
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = await User.findOne({ email: normalizedEmail });
+
+  if (!user || !user.passwordHash || !user.emailVerified) {
+    throw new ApiError(404, "Registered email not found. Please register first.");
+  }
+
+  if (
+    !user.emailVerificationOtpHash ||
+    !user.emailVerificationOtpExpiresAt ||
+    user.emailVerificationOtpExpiresAt < new Date()
+  ) {
+    throw new ApiError(400, "OTP expired. Please request a new OTP.");
+  }
+
+  const validOtp = await bcrypt.compare(
+    String(otp).trim(),
+    user.emailVerificationOtpHash,
+  );
+
+  if (!validOtp) {
+    throw new ApiError(400, "Invalid OTP");
+  }
+
+  user.emailVerificationOtpHash = null;
+  user.emailVerificationOtpExpiresAt = null;
+  user.emailVerificationOtpLastSentAt = null;
+  user.lastAuthAt = new Date();
+  await user.save();
+
+  const tokens = issueAuthTokens(user);
+  res.json(buildAuthResponse(user, tokens));
+});
 
 const guestLogin = asyncHandler(async (req, res) => {
   let { username, alias } = req.body;
@@ -441,4 +525,6 @@ module.exports = {
   logout,
   verifyOtp,
   resendOtp,
+  forgotPasswordSendOtp,
+  forgotPasswordVerifyOtp,
 };
