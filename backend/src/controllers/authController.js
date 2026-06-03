@@ -124,18 +124,10 @@ const register = asyncHandler(async (req, res) => {
       name: error.name,
     });
 
-    return res.status(500).json({
-      success: false,
-      message: "Verification email could not be sent. Please try again.",
-      debug: {
-        stage: "existing_user_set_and_send_otp",
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        command: error.command,
-        response: error.response,
-      },
-    });
+    throw new ApiError(
+  500,
+  "Verification email could not be sent. Please try again.",
+);
   }
     return res.status(200).json({
       success: true,
@@ -178,18 +170,10 @@ const register = asyncHandler(async (req, res) => {
     await User.findByIdAndDelete(user._id);
     await Subscription.deleteOne({ userId: user._id });
 
-    return res.status(500).json({
-      success: false,
-      message: "Account creation failed because verification email could not be sent",
-      debug: {
-        stage: "new_user_set_and_send_otp",
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        command: error.command,
-        response: error.response,
-      },
-    });
+    throw new ApiError(
+  500,
+  "Account creation failed because verification email could not be sent",
+);
   }
 
   res.status(201).json({
@@ -317,51 +301,6 @@ const resendOtp = asyncHandler(async (req, res) => {
   });
 });
 
-const debugSendOtpEmail = asyncHandler(async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    throw new ApiError(400, "email is required");
-  }
-
-  try {
-    await sendVerificationOtpEmail({
-      to: normalizeEmail(email),
-      otp: "123456",
-      username: "Debug User",
-    });
-
-    res.json({
-      success: true,
-      message: "Debug email sent successfully",
-      smtp: {
-        host: process.env.SMTP_HOST ? "YES" : "NO",
-        port: process.env.SMTP_PORT || null,
-        user: process.env.SMTP_USER ? "YES" : "NO",
-        pass: process.env.SMTP_PASS ? "YES" : "NO",
-        from: process.env.SMTP_FROM ? "YES" : "NO",
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Debug email failed",
-      smtp: {
-        host: process.env.SMTP_HOST ? "YES" : "NO",
-        port: process.env.SMTP_PORT || null,
-        user: process.env.SMTP_USER ? "YES" : "NO",
-        pass: process.env.SMTP_PASS ? "YES" : "NO",
-        from: process.env.SMTP_FROM ? "YES" : "NO",
-      },
-      error: {
-        message: error.message,
-        code: error.code,
-        command: error.command,
-        response: error.response,
-      },
-    });
-  }
-});
 
 const guestLogin = asyncHandler(async (req, res) => {
   let { username, alias } = req.body;
@@ -502,5 +441,4 @@ module.exports = {
   logout,
   verifyOtp,
   resendOtp,
-  debugSendOtpEmail,
 };
