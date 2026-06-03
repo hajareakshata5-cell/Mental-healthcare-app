@@ -67,24 +67,24 @@ const completeDailyStreak = asyncHandler(async (req, res) => {
   ]);
 
   const totalSeconds = callAgg[0]?.totalSeconds || 0;
-  const hasThirtyMinCall = totalSeconds >= 30 * 60;
+  const hasTenMinCall = totalSeconds >= 10 * 60;
 
   const waterCompleted =
     req.body.waterCompleted === true ||
     req.body.waterCompleted === "true";
 
-  if (!hasThirtyMinCall || !waterCompleted) {
-    return res.status(200).json({
-      success: true,
-      completed: false,
-      reason: "Need 30 minutes call and completed water intake task",
-      requirements: {
-        callMinutes: Math.floor(totalSeconds / 60),
-        waterCompleted,
-      },
-      streak,
-    });
-  }
+ if (!hasTenMinCall || !waterCompleted) {
+  return res.status(200).json({
+    success: true,
+    completed: false,
+    reason: "Need 10 minutes call and completed water intake task",
+    requirements: {
+      callMinutes: Math.floor(totalSeconds / 60),
+      waterCompleted,
+    },
+    streak,
+  });
+}
 
   if (streak.lastCompletedDate === yesterday) {
     streak.currentStreak += 1;
