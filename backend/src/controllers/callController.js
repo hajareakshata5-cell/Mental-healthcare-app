@@ -18,36 +18,48 @@ const randomMatch = asyncHandler(async (req, res) => {
 
   const gender = (req.body.gender || "any").toString().toLowerCase();
 
-  const query = {
+    const baseQuery = {
     _id: { $ne: user._id },
     isActive: true,
     isOnlineForMatching: true,
     "privacy.allowAnonymousMatching": { $ne: false },
   };
 
-  if (gender === "male" || gender === "female") {
-    query.gender = gender;
+  async function findCandidate(query) {
+    const candidates = await User.aggregate([
+      { $match: query },
+      { $sample: { size: 1 } },
+      {
+        $project: {
+          _id: 1,
+          username: 1,
+          displayName: 1,
+          anonymousAlias: 1,
+          gender: 1,
+        },
+      },
+    ]);
+
+    return candidates[0] || null;
   }
 
-  const candidates = await User.aggregate([
-    { $match: query },
-    { $sample: { size: 1 } },
-    {
-      $project: {
-        _id: 1,
-        username: 1,
-        displayName: 1,
-        anonymousAlias: 1,
-        gender: 1,
-      },
-    },
-  ]);
+  let peer = null;
 
-  if (!candidates.length) {
+  if (gender === "male" || gender === "female") {
+    peer = await findCandidate({
+      ...baseQuery,
+      gender,
+    });
+  }
+
+  if (!peer) {
+    peer = await findCandidate(baseQuery);
+  }
+
+  if (!peer) {
     throw new ApiError(404, "No online co-learner available right now");
   }
-
-  const peer = candidates[0];
+  
 
   return res.status(200).json({
     success: true,
