@@ -115,37 +115,14 @@ const startCall = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const access = await canStartCall(user);
-
-  if (!access.allowed) {
-    throw new ApiError(403, "Buy Premium");
-  }
-
+   // TEMP: Premium call limit bypassed during testing.
+  // Restore canStartCall + freeCallsRemaining logic before production.
   const peerAlias = req.body.peerAlias || req.body.targetUserId || "co_learner";
   const targetUserId = req.body.targetUserId || req.body.receiverId || null;
   const type = req.body.type === "video" ? "video" : "audio";
 
-  let updatedUser = user;
-  const isFreeTier = !user.isSubscribed;
-
-  if (!user.isSubscribed) {
-    updatedUser = await User.findOneAndUpdate(
-      {
-        _id: user._id,
-        isSubscribed: false,
-        freeCallsRemaining: { $gt: 0 },
-      },
-      {
-        $inc: { freeCallQuotaUsed: 1, freeCallsRemaining: -1 },
-      },
-      { returnDocument: "after" },
-    ).select("-passwordHash");
-
-    if (!updatedUser) {
-      throw new ApiError(403, "Buy Premium");
-    }
-  }
-
+  const updatedUser = user;
+  const isFreeTier = false;
   const channelName = targetUserId
   ? `mindcare_pair_${[updatedUser._id.toString(), targetUserId.toString()]
       .sort()
