@@ -4184,6 +4184,14 @@ class _SupportTabState extends State<SupportTab> {
     }
   }
 
+  Future<void> _saveWaterCompletedToday(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+
+    await prefs.setString('practice_water_date', today);
+    await prefs.setBool('practice_water_completed', value);
+  }
+
   Future<void> _completeStreak() async {
     setState(() {
       _streakLoading = true;
@@ -4202,7 +4210,7 @@ class _SupportTabState extends State<SupportTab> {
         _streakMessage = data['completed'] == true
             ? 'Day ${_streakData?['currentStreak'] ?? 1} streak completed!'
             : data['reason']?.toString() ??
-                'Complete 30 min call + water task to unlock streak.';
+                'Complete 10 min call + water task to unlock streak.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -4703,6 +4711,48 @@ class _SupportTabState extends State<SupportTab> {
           onGenderChanged: (index) => setState(() => _genderIndex = index),
           onConnect: _startRandomCoLearnerCall,
         ),
+        const SizedBox(height: 28),
+        Row(
+          children: const [
+            Expanded(
+              child: Text(
+                'Recent practice partners',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_practiceUsers.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: Center(
+              child: Text(
+                'Complete a call to see recent users here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF9CA3AF),
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          )
+        else
+          for (final person in _practiceUsers) ...[
+            if (person.lastDurationSeconds > 0) ...[
+              _PracticeUserTile(
+                person: person,
+                onAdd: () => _sendFriendRequest(person),
+                onAccept: () => _acceptPracticeRequest(person),
+                onCall: () => _startCall(person),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ],
       ],
     );
   }
@@ -4881,13 +4931,14 @@ class _SupportTabState extends State<SupportTab> {
               setState(() {
                 _waterCompletedToday = value;
               });
+              _saveWaterCompletedToday(value);
             },
             title: const Text(
               'Water intake task completed today',
               style: TextStyle(color: Colors.white),
             ),
             subtitle: const Text(
-              'Streak unlocks after 30 minutes of completed calls + water task.',
+              'Streak unlocks after 10 minutes of completed calls + water task.',
               style: TextStyle(color: Color(0xFF94A3B8)),
             ),
             activeThumbColor: Color(0xFF22C55E),
@@ -5368,7 +5419,7 @@ class _PracticeUserTile extends StatelessWidget {
         break;
       case _SupportRelation.sent:
         action = const Text(
-          'Requested',
+          'Request Sent',
           style: TextStyle(color: Color(0xFF8B8B93), fontSize: 16),
         );
         break;
@@ -5573,40 +5624,66 @@ class _RequestTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _SupportAvatar(name: request.name, color: request.color),
-        const SizedBox(width: 16),
+        const SizedBox(width: 14),
         Expanded(
-          child: Text(
-            request.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                request.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                request.date,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF8B8B93),
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: onAccept,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                    ),
+                    child: const Text('Accept'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    onPressed: onDelete,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF333333),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                    ),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        Text(
-          request.date,
-          style: const TextStyle(color: Color(0xFF8B8B93), fontSize: 18),
-        ),
-        const SizedBox(width: 12),
-        FilledButton(
-          onPressed: onAccept,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF6366F1),
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Accept'),
-        ),
-        const SizedBox(width: 8),
-        FilledButton(
-          onPressed: onDelete,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF333333),
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Delete'),
         ),
       ],
     );
