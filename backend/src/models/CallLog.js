@@ -16,6 +16,12 @@ const callLogSchema = new mongoose.Schema(
       index: true,
     },
 
+    matchGenderPreference: {
+  type: String,
+  enum: ["male", "female", "any"],
+  default: "any",
+},
+
     peerAlias: {
       type: String,
       required: true,

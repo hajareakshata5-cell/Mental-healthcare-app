@@ -9,6 +9,8 @@ const ApiError = require("../utils/ApiError");
 const { canStartCall } = require("../services/callPolicyService");
 const { sendPushNotification } = require("../services/notificationService");
 
+const PRACTICE_MATCH_TIMEOUT_MS = 2 * 60 * 1000;
+
 const randomMatch = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
 
@@ -17,61 +19,165 @@ const randomMatch = asyncHandler(async (req, res) => {
   }
 
   const gender = (req.body.gender || "any").toString().toLowerCase();
+  const safeGender = gender === "male" || gender === "female" ? gender : "any";
+  const cutoff = new Date(Date.now() - PRACTICE_MATCH_TIMEOUT_MS);
 
-    const baseQuery = {
-    _id: { $ne: user._id },
-    isActive: true,
-    isOnlineForMatching: true,
-    "privacy.allowAnonymousMatching": { $ne: false },
-  };
-
-  async function findCandidate(query) {
-    const candidates = await User.aggregate([
-      { $match: query },
-      { $sample: { size: 1 } },
-      {
-        $project: {
-          _id: 1,
-          username: 1,
-          displayName: 1,
-          anonymousAlias: 1,
-          gender: 1,
-        },
+  await CallLog.updateMany(
+    {
+      status: "pending",
+      targetUserId: null,
+      peerAlias: "Co-learner",
+      createdAt: { $lt: cutoff },
+    },
+    {
+      $set: {
+        status: "missed",
+        endedAt: new Date(),
       },
-    ]);
+    },
+  );
 
-    return candidates[0] || null;
-  }
+  const myAcceptedCall = await CallLog.findOne({
+    userId: user._id,
+    status: "accepted",
+    peerAlias: "Co-learner",
+    createdAt: { $gte: cutoff },
+  })
+    .sort({ createdAt: -1 })
+    .populate("targetUserId", "username displayName anonymousAlias gender");
 
-  let peer = null;
-
-  if (gender === "male" || gender === "female") {
-    peer = await findCandidate({
-      ...baseQuery,
-      gender,
+  if (myAcceptedCall && myAcceptedCall.targetUserId) {
+    return res.status(200).json({
+      success: true,
+      matched: true,
+      role: "caller",
+      peer: {
+        id: myAcceptedCall.targetUserId._id,
+        name: displayUserName(myAcceptedCall.targetUserId),
+        gender: myAcceptedCall.targetUserId.gender || "unknown",
+      },
+      call: buildCallJoinPayload({
+        callLog: myAcceptedCall,
+        currentUser: user,
+        peerUser: myAcceptedCall.targetUserId,
+      }),
     });
   }
 
-  if (!peer) {
-    peer = await findCandidate(baseQuery);
+  async function findWaitingCall(preferredGender) {
+    const pipeline = [
+      {
+        $match: {
+          status: "pending",
+          targetUserId: null,
+          peerAlias: "Co-learner",
+          userId: { $ne: user._id },
+          createdAt: { $gte: cutoff },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "caller",
+        },
+      },
+      { $unwind: "$caller" },
+      {
+        $match: {
+          "caller.isActive": true,
+          ...(preferredGender === "male" || preferredGender === "female"
+            ? { "caller.gender": preferredGender }
+            : {}),
+        },
+      },
+      { $sample: { size: 1 } },
+    ];
+
+    const rows = await CallLog.aggregate(pipeline);
+    return rows[0] || null;
   }
 
-  if (!peer) {
-    throw new ApiError(404, "No online co-learner available right now");
+  let waitingRow = null;
+
+  if (safeGender === "male" || safeGender === "female") {
+    waitingRow = await findWaitingCall(safeGender);
   }
-  
+
+  if (!waitingRow) {
+    waitingRow = await findWaitingCall("any");
+  }
+
+  if (waitingRow) {
+    const waitingCall = await CallLog.findOneAndUpdate(
+      {
+        _id: waitingRow._id,
+        status: "pending",
+        targetUserId: null,
+      },
+      {
+        $set: {
+          targetUserId: user._id,
+          status: "accepted",
+          acceptedAt: new Date(),
+        },
+      },
+      { new: true },
+    ).populate("userId", "username displayName anonymousAlias gender");
+
+    if (waitingCall) {
+      return res.status(200).json({
+        success: true,
+        matched: true,
+        role: "receiver",
+        peer: {
+          id: waitingCall.userId._id,
+          name: displayUserName(waitingCall.userId),
+          gender: waitingCall.userId.gender || "unknown",
+        },
+        call: buildCallJoinPayload({
+          callLog: waitingCall,
+          currentUser: user,
+          peerUser: waitingCall.userId,
+        }),
+      });
+    }
+  }
+
+  let myWaitingCall = await CallLog.findOne({
+    userId: user._id,
+    status: "pending",
+    targetUserId: null,
+    peerAlias: "Co-learner",
+    createdAt: { $gte: cutoff },
+  });
+
+  if (!myWaitingCall) {
+    const channelName = `mindcare_practice_${user._id}_${Date.now()}`;
+
+    myWaitingCall = await CallLog.create({
+      userId: user._id,
+      targetUserId: null,
+      peerAlias: "Co-learner",
+      type: "audio",
+      durationSeconds: 0,
+      status: "pending",
+      isFreeTier: false,
+      channelName,
+      matchGenderPreference: safeGender,
+    });
+  } else {
+    myWaitingCall.matchGenderPreference = safeGender;
+    await myWaitingCall.save();
+  }
 
   return res.status(200).json({
     success: true,
-    peer: {
-      id: peer._id,
-      name:
-        peer.displayName ||
-        peer.username ||
-        peer.anonymousAlias ||
-        "Co-learner",
-      gender: peer.gender || "unknown",
-    },
+    matched: false,
+    waitingCallId: myWaitingCall._id,
+    message: "Waiting for other co-learners to connect",
+    timeoutSeconds: 120,
   });
 });
 function agoraUidFromUserId(userId) {
