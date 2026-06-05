@@ -9,6 +9,13 @@ const callLogSchema = new mongoose.Schema(
       index: true,
     },
 
+    targetUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     peerAlias: {
       type: String,
       required: true,
@@ -20,6 +27,12 @@ const callLogSchema = new mongoose.Schema(
       default: "audio",
     },
 
+    channelName: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
     durationSeconds: {
       type: Number,
       default: 0,
@@ -27,7 +40,16 @@ const callLogSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["connected", "ended", "missed", "blocked"],
+      enum: [
+        "pending",
+        "accepted",
+        "connected",
+        "ended",
+        "rejected",
+        "cancelled",
+        "missed",
+        "blocked",
+      ],
       required: true,
     },
 
@@ -35,8 +57,6 @@ const callLogSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-
-    // NEW FIELDS
 
     rating: {
       type: Number,
@@ -54,6 +74,21 @@ const callLogSchema = new mongoose.Schema(
     coinsEarned: {
       type: Number,
       default: 0,
+    },
+
+    acceptedAt: {
+      type: Date,
+      default: null,
+    },
+
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+
+    cancelledAt: {
+      type: Date,
+      default: null,
     },
 
     endedAt: {

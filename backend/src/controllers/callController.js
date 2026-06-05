@@ -220,6 +220,318 @@ targetUserId,
   });
 });
 
+const FRIEND_CALL_TIMEOUT_MS = 45 * 1000;
+
+function displayUserName(user) {
+  return (
+    user?.displayName ||
+    user?.username ||
+    user?.anonymousAlias ||
+    "MindCare user"
+  );
+}
+
+function isExpiredCall(callLog) {
+  return Date.now() - new Date(callLog.createdAt).getTime() > FRIEND_CALL_TIMEOUT_MS;
+}
+
+function buildCallJoinPayload({ callLog, currentUser, peerUser }) {
+  const uid = agoraUidFromUserId(currentUser._id);
+  const token = buildAgoraToken(callLog.channelName, uid);
+
+  return {
+    id: callLog._id,
+    status: callLog.status,
+    channelName: callLog.channelName,
+    agoraToken: token,
+    agoraUid: uid,
+    callType: callLog.type,
+    peerName: displayUserName(peerUser),
+    peerId: peerUser?._id || null,
+  };
+}
+
+const requestFriendCall = asyncHandler(async (req, res) => {
+  const caller = await User.findById(req.user._id).select("-passwordHash");
+
+  if (!caller) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const targetUserId = req.body.targetUserId || req.body.receiverId;
+
+  if (!targetUserId) {
+    throw new ApiError(400, "targetUserId is required");
+  }
+
+  if (targetUserId.toString() === caller._id.toString()) {
+    throw new ApiError(400, "You cannot call yourself");
+  }
+
+  const receiver = await User.findById(targetUserId).select(
+    "-passwordHash",
+  );
+
+  if (!receiver) {
+    throw new ApiError(404, "Friend not found");
+  }
+
+  const type = req.body.type === "video" ? "video" : "audio";
+
+  const channelName = `mindcare_friend_${[
+    caller._id.toString(),
+    receiver._id.toString(),
+  ]
+    .sort()
+    .join("_")}_${Date.now()}`;
+
+  const callLog = await CallLog.create({
+    userId: caller._id,
+    targetUserId: receiver._id,
+    peerAlias: displayUserName(receiver),
+    type,
+    durationSeconds: 0,
+    status: "pending",
+    isFreeTier: false,
+    channelName,
+  });
+
+  if (
+    receiver.fcmToken &&
+    receiver.notificationSettings?.pushEnabled !== false &&
+    receiver.notificationSettings?.incomingCalls !== false
+  ) {
+    try {
+      await sendPushNotification({
+        token: receiver.fcmToken,
+        title: "Incoming MindCare Call",
+        body: `${displayUserName(caller)} is calling you`,
+        data: {
+          type: "incoming_call",
+          callId: callLog._id.toString(),
+          callerId: caller._id.toString(),
+          callerName: displayUserName(caller),
+          channelName,
+          callType: type,
+        },
+      });
+    } catch (error) {
+      console.error("[push] friend incoming call failed", error.message);
+    }
+  }
+
+  return res.status(200).json({
+    success: true,
+    call: {
+      id: callLog._id,
+      status: callLog.status,
+      peerName: displayUserName(receiver),
+      peerId: receiver._id,
+      channelName,
+      callType: type,
+      timeoutSeconds: Math.floor(FRIEND_CALL_TIMEOUT_MS / 1000),
+    },
+  });
+});
+
+const getIncomingFriendCall = asyncHandler(async (req, res) => {
+  const receiver = await User.findById(req.user._id).select("-passwordHash");
+
+  if (!receiver) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const callLog = await CallLog.findOne({
+    targetUserId: receiver._id,
+    status: "pending",
+  })
+    .sort({ createdAt: -1 })
+    .populate("userId", "username displayName anonymousAlias");
+
+  if (!callLog) {
+    return res.status(200).json({
+      success: true,
+      hasIncomingCall: false,
+      call: null,
+    });
+  }
+
+  if (isExpiredCall(callLog)) {
+    callLog.status = "missed";
+    await callLog.save();
+
+    return res.status(200).json({
+      success: true,
+      hasIncomingCall: false,
+      call: null,
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    hasIncomingCall: true,
+    call: {
+      id: callLog._id,
+      status: callLog.status,
+      callerId: callLog.userId?._id,
+      callerName: displayUserName(callLog.userId),
+      channelName: callLog.channelName,
+      callType: callLog.type,
+      createdAt: callLog.createdAt,
+    },
+  });
+});
+
+const acceptFriendCall = asyncHandler(async (req, res) => {
+  const receiver = await User.findById(req.user._id).select("-passwordHash");
+
+  if (!receiver) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const { callId } = req.body;
+
+  if (!callId) {
+    throw new ApiError(400, "callId is required");
+  }
+
+  const callLog = await CallLog.findOne({
+    _id: callId,
+    targetUserId: receiver._id,
+    status: "pending",
+  }).populate("userId", "username displayName anonymousAlias");
+
+  if (!callLog) {
+    throw new ApiError(404, "Incoming call not found");
+  }
+
+  if (isExpiredCall(callLog)) {
+    callLog.status = "missed";
+    await callLog.save();
+    throw new ApiError(410, "Call is no longer available");
+  }
+
+  callLog.status = "accepted";
+  callLog.acceptedAt = new Date();
+  await callLog.save();
+
+  return res.status(200).json({
+    success: true,
+    call: buildCallJoinPayload({
+      callLog,
+      currentUser: receiver,
+      peerUser: callLog.userId,
+    }),
+  });
+});
+
+const rejectFriendCall = asyncHandler(async (req, res) => {
+  const { callId } = req.body;
+
+  if (!callId) {
+    throw new ApiError(400, "callId is required");
+  }
+
+  const callLog = await CallLog.findOne({
+    _id: callId,
+    targetUserId: req.user._id,
+    status: "pending",
+  });
+
+  if (!callLog) {
+    return res.status(200).json({
+      success: true,
+      message: "Call already handled",
+    });
+  }
+
+  callLog.status = "rejected";
+  callLog.rejectedAt = new Date();
+  await callLog.save();
+
+  return res.status(200).json({
+    success: true,
+    message: "Call rejected",
+  });
+});
+
+const cancelFriendCall = asyncHandler(async (req, res) => {
+  const { callId } = req.body;
+
+  if (!callId) {
+    throw new ApiError(400, "callId is required");
+  }
+
+  const callLog = await CallLog.findOne({
+    _id: callId,
+    userId: req.user._id,
+    status: "pending",
+  });
+
+  if (!callLog) {
+    return res.status(200).json({
+      success: true,
+      message: "Call already handled",
+    });
+  }
+
+  callLog.status = "cancelled";
+  callLog.cancelledAt = new Date();
+  await callLog.save();
+
+  return res.status(200).json({
+    success: true,
+    message: "Call cancelled",
+  });
+});
+
+const getFriendCallStatus = asyncHandler(async (req, res) => {
+  const callId = req.params.callId;
+
+  const caller = await User.findById(req.user._id).select("-passwordHash");
+
+  if (!caller) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const callLog = await CallLog.findOne({
+    _id: callId,
+    userId: caller._id,
+  }).populate("targetUserId", "username displayName anonymousAlias");
+
+  if (!callLog) {
+    throw new ApiError(404, "Call not found");
+  }
+
+  if (callLog.status === "pending" && isExpiredCall(callLog)) {
+    callLog.status = "missed";
+    await callLog.save();
+  }
+
+  const payload = {
+    success: true,
+    status: callLog.status,
+    call: {
+      id: callLog._id,
+      status: callLog.status,
+      peerName: displayUserName(callLog.targetUserId),
+      peerId: callLog.targetUserId?._id,
+      channelName: callLog.channelName,
+      callType: callLog.type,
+    },
+  };
+
+  if (callLog.status === "accepted" || callLog.status === "connected") {
+    payload.call = buildCallJoinPayload({
+      callLog,
+      currentUser: caller,
+      peerUser: callLog.targetUserId,
+    });
+  }
+
+  return res.status(200).json(payload);
+});
+
 const endCall = asyncHandler(async (req, res) => {
   const { callId, durationSeconds = 0, rating = 0, feedback = "" } = req.body;
 
@@ -232,10 +544,10 @@ const endCall = asyncHandler(async (req, res) => {
   const coinsEarned = Math.max(1, Math.floor(safeDuration / 60));
 
   const callLog = await CallLog.findOneAndUpdate(
-    {
-      _id: callId,
-      userId: req.user._id,
-    },
+  {
+    _id: callId,
+    $or: [{ userId: req.user._id }, { targetUserId: req.user._id }],
+  },
     {
       durationSeconds: safeDuration,
       status: "ended",
@@ -326,6 +638,12 @@ const getCallProgress = asyncHandler(async (req, res) => {
 module.exports = {
   randomMatch,
   startCall,
+  requestFriendCall,
+  getIncomingFriendCall,
+  acceptFriendCall,
+  rejectFriendCall,
+  cancelFriendCall,
+  getFriendCallStatus,
   endCall,
   getCallHistory,
   getCallProgress,
