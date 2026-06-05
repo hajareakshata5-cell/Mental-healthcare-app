@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/friend_call_screens.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -4090,6 +4091,10 @@ class _SupportTabState extends State<SupportTab> {
   bool _streakLoading = false;
   String? _streakMessage;
 
+  Timer? _incomingFriendCallTimer;
+  bool _incomingFriendCallVisible = false;
+  String? _lastIncomingFriendCallId;
+
   int _practiceCalls = 0;
   int _weeklyCalls = 0;
   int _totalMinutes = 0;
@@ -4122,6 +4127,13 @@ class _SupportTabState extends State<SupportTab> {
     super.initState();
     _loadSupportData();
     _loadStreak();
+    _startIncomingFriendCallPolling();
+  }
+
+  @override
+  void dispose() {
+    _incomingFriendCallTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadSupportData() async {
@@ -4557,6 +4569,62 @@ class _SupportTabState extends State<SupportTab> {
     return false;
   }
 
+  void _startIncomingFriendCallPolling() {
+    _incomingFriendCallTimer?.cancel();
+
+    _incomingFriendCallTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _checkIncomingFriendCall(),
+    );
+
+    _checkIncomingFriendCall();
+  }
+
+  Future<void> _checkIncomingFriendCall() async {
+    if (_incomingFriendCallVisible) return;
+
+    final token = widget.sessionService.apiService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final response =
+          await widget.sessionService.apiService.getIncomingFriendCall();
+
+      final hasIncoming = response['hasIncomingCall'] == true;
+      final call = response['call'];
+
+      if (!hasIncoming || call is! Map<String, dynamic>) return;
+
+      final callId = call['id']?.toString() ?? '';
+      if (callId.isEmpty) return;
+
+      if (_lastIncomingFriendCallId == callId) return;
+
+      if (!mounted) return;
+
+      _incomingFriendCallVisible = true;
+      _lastIncomingFriendCallId = callId;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => IncomingFriendCallScreen(
+            apiService: widget.sessionService.apiService,
+            call: call,
+          ),
+        ),
+      );
+
+      _incomingFriendCallVisible = false;
+
+      if (mounted) {
+        await _loadSupportData();
+        await _loadStreak();
+      }
+    } catch (error) {
+      debugPrint('INCOMING_FRIEND_CALL_POLL_ERROR: $error');
+    }
+  }
+
   Future<void> _startRandomCoLearnerCall() async {
     if (!await _ensureCallToken()) return;
     final gender = _genderIndex == 0
@@ -4585,11 +4653,12 @@ class _SupportTabState extends State<SupportTab> {
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-          builder: (_) => MindcareConnectScreen(
-                apiService: widget.sessionService.apiService,
-                peerAlias: person.name,
-                targetUserId: person.id,
-              )),
+        builder: (_) => FriendRingingScreen(
+          apiService: widget.sessionService.apiService,
+          targetUserId: person.id,
+          peerName: person.name,
+        ),
+      ),
     );
 
     if (mounted) {

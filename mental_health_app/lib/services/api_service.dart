@@ -371,6 +371,64 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> requestFriendCall({
+    required String targetUserId,
+    required String peerAlias,
+    String callType = 'audio',
+  }) async {
+    return _postJson(
+      _apiUri('/calls/friend/request'),
+      body: {
+        'targetUserId': targetUserId,
+        'peerAlias': peerAlias,
+        'type': callType,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getIncomingFriendCall() async {
+    return _getJson(_apiUri('/calls/friend/incoming'));
+  }
+
+  Future<Map<String, dynamic>> acceptFriendCall({
+    required String callId,
+  }) async {
+    return _postJson(
+      _apiUri('/calls/friend/accept'),
+      body: {
+        'callId': callId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> rejectFriendCall({
+    required String callId,
+  }) async {
+    return _postJson(
+      _apiUri('/calls/friend/reject'),
+      body: {
+        'callId': callId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> cancelFriendCall({
+    required String callId,
+  }) async {
+    return _postJson(
+      _apiUri('/calls/friend/cancel'),
+      body: {
+        'callId': callId,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getFriendCallStatus({
+    required String callId,
+  }) async {
+    return _getJson(_apiUri('/calls/friend/status/$callId'));
+  }
+
   Future<Map<String, dynamic>> endCall({
     required String callId,
     required int durationSeconds,
