@@ -29,6 +29,19 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
   String? _error;
   Timer? _timer;
 
+  static const List<String> _waitingQuotes = [
+    'You are not alone. The right co-learner will join soon.',
+    'A calm mind can restart again, one breath at a time.',
+    'Your healing matters. Stay here for yourself.',
+    'Even waiting is progress when you choose support.',
+    'Someone kind may be one moment away from connecting.',
+  ];
+
+  String get _currentWaitingQuote {
+    final index = (_seconds ~/ 12) % _waitingQuotes.length;
+    return _waitingQuotes[index];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +124,8 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
           timer.cancel();
 
           setState(() {
-            _error = "Sorry, co-learner is not available right now";
+            _error =
+                "No co-learner is available right now. Please try again soon.";
           });
 
           return;
@@ -121,28 +135,21 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
           final response =
               await widget.apiService.randomMatch(gender: widget.gender);
 
-          final peer = response["peer"];
+          final matched = response["matched"] == true;
+          final call = response["call"] as Map<String, dynamic>?;
 
-          if (peer == null || peer["id"] == null) {
+          if (!matched || call == null) {
             return;
           }
 
           timer.cancel();
 
-          final callResponse = await widget.apiService.startCall(
-            peerAlias: peer["name"]?.toString() ?? "Co-learner",
-            callType: "audio",
-            targetUserId: peer["id"].toString(),
-          );
-
-          final callId = callResponse["call"]?["id"]?.toString();
-          final channelName = callResponse["call"]?["channelName"]?.toString();
-          final agoraToken =
-              callResponse["call"]?["agoraToken"]?.toString() ?? "";
-          final agoraUid = int.tryParse(
-                callResponse["call"]?["agoraUid"]?.toString() ?? "",
-              ) ??
-              0;
+          final callId = call["id"]?.toString();
+          final channelName = call["channelName"]?.toString();
+          final agoraToken = call["agoraToken"]?.toString() ?? "";
+          final agoraUid =
+              int.tryParse(call["agoraUid"]?.toString() ?? "") ?? 0;
+          final peerName = call["peerName"]?.toString() ?? "Co-learner";
 
           if (callId == null || callId.isEmpty) {
             throw Exception("Call ID missing");
@@ -163,7 +170,7 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
                 channelName: channelName,
                 token: agoraToken,
                 uid: agoraUid,
-                peerName: peer["name"]?.toString() ?? "Co-learner",
+                peerName: peerName,
               ),
             ),
           );
@@ -222,6 +229,17 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  _currentWaitingQuote,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 16,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
                   ),
                   textAlign: TextAlign.center,
                 ),
