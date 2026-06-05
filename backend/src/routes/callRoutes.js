@@ -1,5 +1,5 @@
 const express = require("express");
-const { authRequired, requireCallAccess } = require("../middleware/auth");
+const { authRequired } = require("../middleware/auth");
 const {
   randomMatch,
   startCall,
@@ -16,8 +16,8 @@ const {
 
 const router = express.Router();
 
-router.post("/random-match", authRequired, requireCallAccess, randomMatch);
-router.post("/start", authRequired, requireCallAccess, startCall);
+router.post("/random-match", authRequired, randomMatch);
+router.post("/start", authRequired, startCall);
 
 router.post("/friend/request", authRequired, requestFriendCall);
 router.get("/friend/incoming", authRequired, getIncomingFriendCall);
