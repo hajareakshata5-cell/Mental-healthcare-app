@@ -680,13 +680,14 @@ const endCall = asyncHandler(async (req, res) => {
 });
 
 const getCallHistory = asyncHandler(async (req, res) => {
-  const calls = await CallLog.find({
-    userId: req.user._id,
-    status: "ended",
-  })
-    .sort({ createdAt: -1 })
-    .limit(50);
-
+ const calls = await CallLog.find({
+  status: "ended",
+  $or: [{ userId: req.user._id }, { targetUserId: req.user._id }],
+})
+  .populate("userId", "username displayName anonymousAlias")
+  .populate("targetUserId", "username displayName anonymousAlias")
+  .sort({ createdAt: -1 })
+  .limit(50);
   return res.status(200).json({
     success: true,
     calls,
@@ -695,10 +696,9 @@ const getCallHistory = asyncHandler(async (req, res) => {
 
 const getCallProgress = asyncHandler(async (req, res) => {
   const calls = await CallLog.find({
-    userId: req.user._id,
-    status: "ended",
-  }).sort({ createdAt: -1 });
-
+  status: "ended",
+  $or: [{ userId: req.user._id }, { targetUserId: req.user._id }],
+}).sort({ createdAt: -1 });
   const totalCalls = calls.length;
 
   const totalSeconds = calls.reduce(
