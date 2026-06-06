@@ -1212,17 +1212,12 @@ class _TodayTaskCompletedCardState extends State<_TodayTaskCompletedCard> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: (_completed
-                      ? const Color(0xFF0F766E)
-                      : const Color(0xFFF59E0B))
-                  .withValues(alpha: 0.12),
+              color: const Color(0xFFF97316).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(
-              _completed ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: _completed
-                  ? const Color(0xFF0F766E)
-                  : const Color(0xFFF59E0B),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Color(0xFFF97316),
             ),
           ),
           const SizedBox(width: 12),
@@ -3621,187 +3616,147 @@ class ClinicalPlanningTab extends StatelessWidget {
     return AnimatedBuilder(
       animation: clinicalEngine,
       builder: (context, _) {
-        final recommendations = clinicalEngine.recommendations;
-        final grounding = clinicalEngine.groundingSuggestions;
-        final sleep = clinicalEngine.sleepSuggestions;
-        final hydration = clinicalEngine.hydrationReminders;
-        final therapy = clinicalEngine.therapyRecommendations;
-        final events = clinicalEngine.events;
-
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
+          children: const [
             _HeroCard(
               title: 'Meditation Hub',
-              subtitle:
-                  'Live scoring from chat, support, sound therapy, hydration, and persisted memory. The tab changes as the conversation changes.',
-              chips: [
-                'Severity ${clinicalEngine.severityLevel}',
-                'Stress ${clinicalEngine.stressScore}/100',
-                'Tone ${clinicalEngine.chatbotTone}',
-              ],
+              subtitle: '',
+              chips: [],
             ),
-            const SizedBox(height: 14),
-            const _MeditationVideoCard(),
-            const SizedBox(height: 14),
-            _SectionHeader(
-              title: 'Live signal',
-              subtitle:
-                  'The engine recalculates after each message and check-in.',
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Meditation Progress',
-              body:
-                  'Emotion ${clinicalEngine.emotion} • trend ${clinicalEngine.moodTrend} • confidence ${(clinicalEngine.confidence * 100).round()}% • hydration streak ${clinicalEngine.hydrationStreakDays} day(s) • sound sessions ${clinicalEngine.soundUsageSessions}',
-              icon: Icons.favorite_border,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Severity recommendation',
-              body: doctorRecommendationService.buildRecommendation(
-                clinicalEngine.severityLevel == 'critical'
-                    ? 'high'
-                    : clinicalEngine.severityLevel == 'high'
-                        ? 'high'
-                        : clinicalEngine.severityLevel == 'moderate'
-                            ? 'moderate'
-                            : 'low',
-              ),
-              icon: Icons.warning_amber_rounded,
-              accent: clinicalEngine.severityLevel == 'critical' ||
-                      clinicalEngine.severityLevel == 'high'
-                  ? const Color(0xFFB45309)
-                  : const Color(0xFF0F766E),
-            ),
-            const SizedBox(height: 14),
-            _SectionHeader(
-              title: 'Adaptive recommendations',
-              subtitle:
-                  'These update after chat, hydration, support, and sound usage.',
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Recommendations',
-              body: recommendations.isEmpty
-                  ? 'No active recommendation yet.'
-                  : recommendations.join('\n'),
-              icon: Icons.auto_awesome,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Grounding suggestions',
-              body: grounding.isEmpty
-                  ? 'No grounding suggestion yet.'
-                  : grounding.join('\n'),
-              icon: Icons.anchor_outlined,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Sleep suggestions',
-              body:
-                  sleep.isEmpty ? 'No sleep suggestion yet.' : sleep.join('\n'),
-              icon: Icons.nights_stay_outlined,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Hydration reminders',
-              body: hydration.isEmpty
-                  ? 'No hydration reminder yet.'
-                  : hydration.join('\n'),
-              icon: Icons.water_drop_outlined,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Meditation Recommendations',
-              body: therapy.isEmpty
-                  ? 'No therapy recommendation yet.'
-                  : therapy.join('\n'),
-              icon: Icons.spa_outlined,
-            ),
-            const SizedBox(height: 14),
-            _SectionHeader(
-              title: 'Meditation Actions',
-              subtitle: 'Use these to drive real updates into the engine.',
-            ),
-            const SizedBox(height: 10),
-            _GlassCard(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.water_drop_outlined, size: 18),
-                    label: const Text('Log water 250 ml'),
-                    onPressed: () =>
-                        clinicalEngine.recordHydration(consumedMl: 250),
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.local_drink_outlined, size: 18),
-                    label: const Text('Log water 500 ml'),
-                    onPressed: () =>
-                        clinicalEngine.recordHydration(consumedMl: 500),
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.favorite_border, size: 18),
-                    label: const Text('Calm check-in'),
-                    onPressed: () => clinicalEngine.recordMoodCheckin(
-                      mood: 'calm',
-                      stress: 10,
-                      energy: 8,
-                      notes: 'Manual calm check-in',
-                      tags: const ['calm'],
-                    ),
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.warning_amber_rounded, size: 18),
-                    label: const Text('Stress spike'),
-                    onPressed: () => clinicalEngine.recordMoodCheckin(
-                      mood: 'stressed',
-                      stress: 82,
-                      energy: 3,
-                      notes: 'Manual stress spike check-in',
-                      tags: const ['stress', 'panic'],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            _SectionHeader(
-              title: 'Memory',
-              subtitle:
-                  'Persisted locally and refreshed from backend mood history.',
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Counter state',
-              body:
-                  'Mood logs ${clinicalEngine.moodHistoryCount} • support interactions ${clinicalEngine.supportInteractionCount} • sound sessions ${clinicalEngine.soundUsageSessions} • hydration consumed ${clinicalEngine.hydrationConsumedMl} ml of ${clinicalEngine.hydrationGoalMl} ml',
-              icon: Icons.history,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Recent signals',
-              body: clinicalEngine.recentSignals.isEmpty
-                  ? 'No live signals yet.'
-                  : clinicalEngine.recentSignals.join(' • '),
-              icon: Icons.timeline,
-            ),
-            const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Recent events',
-              body: events.isEmpty
-                  ? 'No meditation activity yet.'
-                  : events
-                      .take(4)
-                      .map((event) => '${event.kind}: ${event.text}')
-                      .join('\n\n'),
-              icon: Icons.notes,
-            ),
+            SizedBox(height: 14),
+            _MeditationVideoCard(),
+            SizedBox(height: 14),
+            _MeditationStreakCard(),
           ],
         );
       },
+    );
+  }
+}
+
+class _MeditationStreakCard extends StatefulWidget {
+  const _MeditationStreakCard();
+
+  @override
+  State<_MeditationStreakCard> createState() => _MeditationStreakCardState();
+}
+
+class _MeditationStreakCardState extends State<_MeditationStreakCard> {
+  bool _completed = false;
+  int _streak = 0;
+
+  String get _todayKey {
+    final now = DateTime.now();
+    return '${now.year}-${now.month}-${now.day}';
+  }
+
+  bool _isYesterday(String? dateKey) {
+    if (dateKey == null || dateKey.isEmpty) return false;
+
+    final parts = dateKey.split('-');
+    if (parts.length != 3) return false;
+
+    final savedDate = DateTime.tryParse(
+      '${parts[0]}-${parts[1].padLeft(2, '0')}-${parts[2].padLeft(2, '0')}',
+    );
+
+    if (savedDate == null) return false;
+
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 1));
+
+    return savedDate.year == yesterday.year &&
+        savedDate.month == yesterday.month &&
+        savedDate.day == yesterday.day;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMeditationState();
+  }
+
+  Future<void> _loadMeditationState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastCompletedDate =
+        prefs.getString('mindcare_meditation_last_completed_date');
+    var streak = prefs.getInt('mindcare_meditation_streak') ?? 0;
+
+    if (lastCompletedDate != null &&
+        lastCompletedDate != _todayKey &&
+        !_isYesterday(lastCompletedDate)) {
+      streak = 0;
+      await prefs.setInt('mindcare_meditation_streak', 0);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _completed = lastCompletedDate == _todayKey;
+      _streak = streak;
+    });
+  }
+
+  Future<void> _completeMeditationToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastCompletedDate =
+        prefs.getString('mindcare_meditation_last_completed_date');
+
+    if (lastCompletedDate == _todayKey) return;
+
+    final currentStreak = prefs.getInt('mindcare_meditation_streak') ?? 0;
+    final newStreak = _isYesterday(lastCompletedDate) ? currentStreak + 1 : 1;
+
+    await prefs.setString(
+      'mindcare_meditation_last_completed_date',
+      _todayKey,
+    );
+    await prefs.setInt('mindcare_meditation_streak', newStreak);
+
+    if (!mounted) return;
+    setState(() {
+      _completed = true;
+      _streak = newStreak;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassCard(
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF97316).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Color(0xFFF97316),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _completed
+                  ? 'Meditation streak: Day $_streak completed.'
+                  : 'Reduce your anxiety, sadness, and negative thinking by doing meditation and maintain your streak.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF334155),
+                  ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _completed ? null : _completeMeditationToday,
+            child: Text(_completed ? 'Done' : 'Meditation Completed'),
+          ),
+        ],
+      ),
     );
   }
 }
