@@ -169,7 +169,6 @@ class MindCareAuthScreen extends StatefulWidget {
 class _MindCareAuthScreenState extends State<MindCareAuthScreen> {
   final TextEditingController _email = TextEditingController();
   final TextEditingController _password = TextEditingController();
-  final TextEditingController _alias = TextEditingController();
   final TextEditingController _username = TextEditingController();
   final TextEditingController _otp = TextEditingController();
   bool _otpMode = false;
@@ -185,7 +184,6 @@ class _MindCareAuthScreenState extends State<MindCareAuthScreen> {
   void dispose() {
     _email.dispose();
     _password.dispose();
-    _alias.dispose();
     _username.dispose();
     _otp.dispose();
     super.dispose();
@@ -220,20 +218,6 @@ class _MindCareAuthScreenState extends State<MindCareAuthScreen> {
           _password.text,
         );
       }
-    } catch (error) {
-      setState(() => _error = error.toString());
-    }
-  }
-
-  Future<void> _guest() async {
-    setState(() => _error = null);
-
-    try {
-      final alias = _alias.text.trim();
-
-      await widget.sessionService.continueAsGuest(
-        alias: alias.isEmpty ? null : alias,
-      );
     } catch (error) {
       setState(() => _error = error.toString());
     }
@@ -582,21 +566,6 @@ class _MindCareAuthScreenState extends State<MindCareAuthScreen> {
                                         ? 'Create account'
                                         : 'Sign in'),
                               ),
-                            ),
-                            const SizedBox(height: 18),
-                            const Divider(),
-                            const SizedBox(height: 14),
-                            TextField(
-                              controller: _alias,
-                              decoration: const InputDecoration(
-                                labelText: 'Anonymous alias',
-                                hintText: 'Optional for guest mode',
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton(
-                              onPressed: busy ? null : _guest,
-                              child: const Text('Continue as guest'),
                             ),
                           ],
                           if (_successMessage != null) ...[
@@ -3941,8 +3910,7 @@ class SoundTherapyTab extends StatelessWidget {
               children: [
                 _HeroCard(
                   title: 'Sound therapy',
-                  subtitle:
-                      'Premium-looking calming audio with offline-ready generated loops, favorites, history, and streaks.',
+                  subtitle: '',
                   trailing: Container(
                     width: 38,
                     height: 38,
@@ -3957,10 +3925,6 @@ class SoundTherapyTab extends StatelessWidget {
                   ),
                   chips: [
                     'Sound streak: Day ${service.soundStreakDays}',
-                    'Favorites ${service.favoriteTrackIds.length}',
-                    service.isPremiumUnlocked
-                        ? 'Premium unlocked'
-                        : 'Premium preview',
                   ],
                   children: [
                     const SizedBox(height: 14),
@@ -6246,7 +6210,6 @@ class _NowPlayingCard extends StatelessWidget {
 
     final minutesRemaining =
         service.timerTarget?.inMinutes ?? track!.defaultTimerMinutes;
-    final isLocked = track!.premiumOnly && !service.isPremiumUnlocked;
 
     return _GlassCard(
       child: Column(
@@ -6276,11 +6239,9 @@ class _NowPlayingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      service.isPreviewMode && isLocked
-                          ? 'Premium preview session'
-                          : service.isPlaying
-                              ? 'Playing with timer'
-                              : 'Ready to play',
+                      service.isPlaying
+                          ? 'Playing with timer'
+                          : 'Ready to play',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: const Color(0xFF64748B),
                           ),
@@ -6323,21 +6284,7 @@ class _NowPlayingCard extends StatelessWidget {
                 icon: const Icon(Icons.check_circle_outline),
                 label: const Text('Complete'),
               ),
-              const SizedBox(width: 10),
-              TextButton.icon(
-                onPressed: isLocked ? () => service.unlockPremium() : null,
-                icon: const Icon(Icons.workspace_premium_outlined),
-                label: Text(isLocked ? 'Unlock premium' : 'Premium active'),
-              ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Favorites, timer, and streaks are saved locally. Playback uses generated offline loops so the buttons stay live even without audio assets.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF64748B),
-                  height: 1.45,
-                ),
           ),
         ],
       ),
