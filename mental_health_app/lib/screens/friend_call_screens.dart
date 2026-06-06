@@ -26,6 +26,7 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
   String? _callId;
   bool _loading = true;
   bool _unavailable = false;
+  bool _busy = false;
   bool _ending = false;
   String? _error;
   int _elapsed = 0;
@@ -48,6 +49,21 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
         targetUserId: widget.targetUserId,
         peerAlias: widget.peerName,
       );
+
+      final status = response['status']?.toString() ??
+          response['call']?['status']?.toString() ??
+          '';
+
+      if (status == 'busy') {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _unavailable = true;
+          _busy = true;
+          _error = null;
+        });
+        return;
+      }
 
       final call = response['call'] as Map<String, dynamic>?;
       final callId = call?['id']?.toString();
@@ -172,6 +188,7 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
       _callId = null;
       _loading = true;
       _unavailable = false;
+      _busy = false;
       _ending = false;
       _error = null;
       _elapsed = 0;
@@ -184,11 +201,12 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
     if (_unavailable) {
       return _FriendUnavailableView(
         peerName: widget.peerName,
+        title:
+            _busy ? 'Your friend is busy currently' : 'Currently Unavailable',
         onCallAgain: _callAgain,
         onCancel: () => Navigator.pop(context),
       );
     }
-
     return Scaffold(
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
@@ -233,7 +251,7 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Your MySivi friend',
+                'Your MindCare friend',
                 style: TextStyle(
                   color: Color(0xFF9CA3AF),
                   fontSize: 22,
@@ -442,14 +460,15 @@ class _IncomingFriendCallScreenState extends State<IncomingFriendCallScreen> {
 class _FriendUnavailableView extends StatelessWidget {
   const _FriendUnavailableView({
     required this.peerName,
+    required this.title,
     required this.onCallAgain,
     required this.onCancel,
   });
 
   final String peerName;
+  final String title;
   final VoidCallback onCallAgain;
   final VoidCallback onCancel;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -476,7 +495,7 @@ class _FriendUnavailableView extends StatelessWidget {
               ),
               const SizedBox(height: 28),
               const Text(
-                'Co-learner friend',
+                'Your MindCare Friend',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -484,8 +503,8 @@ class _FriendUnavailableView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Currently Unavailable',
+              Text(
+                title,
                 style: TextStyle(
                   color: Color(0xFFF59E0B),
                   fontSize: 28,

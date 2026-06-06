@@ -341,6 +341,23 @@ function isExpiredCall(callLog) {
   return Date.now() - new Date(callLog.createdAt).getTime() > FRIEND_CALL_TIMEOUT_MS;
 }
 
+async function hasActiveFriendCall(userId) {
+  const activeCall = await CallLog.findOne({
+    status: { $in: ["pending", "accepted", "connected"] },
+    $or: [{ userId }, { targetUserId: userId }],
+  });
+
+  if (!activeCall) return false;
+
+  if (activeCall.status === "pending" && isExpiredCall(activeCall)) {
+    activeCall.status = "missed";
+    await activeCall.save();
+    return false;
+  }
+
+  return true;
+}
+
 function buildCallJoinPayload({ callLog, currentUser, peerUser }) {
   const uid = agoraUidFromUserId(currentUser._id);
   const token = buildAgoraToken(callLog.channelName, uid);
@@ -381,6 +398,34 @@ const requestFriendCall = asyncHandler(async (req, res) => {
   if (!receiver) {
     throw new ApiError(404, "Friend not found");
   }
+
+  const receiverBusy = await hasActiveFriendCall(receiver._id);
+
+if (receiverBusy) {
+  const busyLog = await CallLog.create({
+    userId: caller._id,
+    targetUserId: receiver._id,
+    peerAlias: displayUserName(receiver),
+    type: req.body.type === "video" ? "video" : "audio",
+    durationSeconds: 0,
+    status: "busy",
+    isFreeTier: false,
+    channelName: "",
+  });
+
+  return res.status(200).json({
+    success: true,
+    status: "busy",
+    message: "Your friend is busy currently",
+    call: {
+      id: busyLog._id,
+      status: "busy",
+      peerName: displayUserName(receiver),
+      peerId: receiver._id,
+      callType: busyLog.type,
+    },
+  });
+}
 
   const type = req.body.type === "video" ? "video" : "audio";
 
