@@ -4140,26 +4140,42 @@ class _SupportTabState extends State<SupportTab> {
         .toSet();
   }
 
-  int _lastDurationForUser(String name, List<dynamic> calls) {
-    final normalized =
-        name.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ').trim();
+  int _lastDurationForUser(String userId, String name, List<dynamic> calls) {
+    final normalizedName =
+        name.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
     var latestSeconds = 0;
     DateTime? latestDate;
 
     for (final raw in calls) {
       if (raw is! Map) continue;
-      final peer = _cleanPeerName((raw['peerAlias'] ?? '').toString())
-          .toLowerCase()
-          .replaceAll(RegExp(r'\\s+'), ' ')
-          .trim();
-      if (peer != normalized) continue;
-      final createdAt = DateTime.tryParse((raw['createdAt'] ?? '').toString());
+
+      final possiblePeerIds = <String>[
+        _userIdFrom(raw['targetUserId']),
+        _userIdFrom(raw['peerId']),
+        _userIdFrom(raw['receiverId']),
+        _userIdFrom(raw['senderId']),
+      ].where((id) => id.isNotEmpty).toSet();
+
+      final peerName = _cleanPeerName(
+        (raw['peerAlias'] ?? raw['peerName'] ?? raw['name'] ?? '').toString(),
+      ).toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      final idMatched = possiblePeerIds.contains(userId);
+      final nameMatched = peerName.isNotEmpty && peerName == normalizedName;
+
+      if (!idMatched && !nameMatched) continue;
+
+      final createdAt =
+          DateTime.tryParse((raw['createdAt'] ?? '').toString())?.toLocal();
+
       if (latestDate == null ||
           (createdAt != null && createdAt.isAfter(latestDate))) {
         latestDate = createdAt;
         latestSeconds = _asInt(raw['durationSeconds']);
       }
     }
+
     return latestSeconds;
   }
 
@@ -4178,7 +4194,7 @@ class _SupportTabState extends State<SupportTab> {
       final id = _userIdFrom(raw);
       if (id.isEmpty) continue;
       final name = _userNameFrom(raw);
-      final duration = _lastDurationForUser(name, calls);
+      final duration = _lastDurationForUser(id, name, calls);
       final relation = friendIds.contains(id)
           ? _SupportRelation.friend
           : incomingIds.contains(id)
@@ -4642,7 +4658,7 @@ class _SupportTabState extends State<SupportTab> {
           ],
         ),
         const SizedBox(height: 16),
-        if (_practiceUsers.isEmpty)
+        if (!_practiceUsers.any((person) => person.lastDurationSeconds > 0))
           const Padding(
             padding: EdgeInsets.only(top: 20),
             child: Center(
