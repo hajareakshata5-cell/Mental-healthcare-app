@@ -1069,22 +1069,10 @@ class _DashboardTabState extends State<DashboardTab> {
 
   @override
   Widget build(BuildContext context) {
-    final subscriptionStatus =
-        widget.subscription?['subscription'] ?? widget.subscription;
-    final activePlan = subscriptionStatus is Map
-        ? (subscriptionStatus['plan'] ?? subscriptionStatus['tier'] ?? 'free')
-            .toString()
-        : 'free';
-
-    final healingLevel = widget.sessionUser?.healing?.healingLevel ?? 1;
-    final wellnessXp = widget.sessionUser?.healing?.wellnessXp ?? 0;
+    final todayQuote = _quoteForToday();
     final hydrationGoal = widget.dailyPlan?['water']?['targetMl']?.toString() ??
         widget.dailyPlan?['waterTargetMl']?.toString() ??
         '2000';
-    final moodCount = (widget.moodHistory?['items'] as List?)?.length ??
-        (widget.moodHistory?['history'] as List?)?.length ??
-        0;
-    final todayQuote = _quoteForToday();
 
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
@@ -1098,9 +1086,7 @@ class _DashboardTabState extends State<DashboardTab> {
                 ? 'Track your meditation, hydration, mood and daily wellness goals.'
                 : 'Welcome back, ${widget.sessionUser!.displayName ?? widget.sessionUser!.alias} Stay consistent and build healthy habits every day.',
             chips: const [
-              'Daily plan',
-              'Hydration goal',
-              'Meditation progress',
+              'Water streak',
             ],
           ),
           const SizedBox(height: 10),
@@ -1109,50 +1095,6 @@ class _DashboardTabState extends State<DashboardTab> {
             body: todayQuote,
             icon: Icons.wb_sunny_outlined,
             accent: const Color(0xFFF59E0B),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _StatusCard(
-                  label: 'Healing level',
-                  value: '$healingLevel',
-                  icon: Icons.auto_graph,
-                  accent: const Color(0xFF0F766E),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatusCard(
-                  label: 'Plan',
-                  value: activePlan,
-                  icon: Icons.workspace_premium_outlined,
-                  accent: const Color(0xFFF59E0B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _StatusCard(
-                  label: 'Wellness XP',
-                  value: '$wellnessXp',
-                  icon: Icons.bolt,
-                  accent: const Color(0xFF155E75),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatusCard(
-                  label: 'Mood logs',
-                  value: '$moodCount',
-                  icon: Icons.mood,
-                  accent: const Color(0xFF8B5CF6),
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 14),
           _SectionHeader(
@@ -1166,53 +1108,9 @@ class _DashboardTabState extends State<DashboardTab> {
             seedTargetMl: int.tryParse(hydrationGoal) ?? 2000,
           ),
           const SizedBox(height: 14),
-          _SectionHeader(
-            title: 'Daily wellness plan',
-            subtitle: 'Simple tasks for a healthy body and calm mind.',
-          ),
-          const SizedBox(height: 10),
-          _InfoCard(
-            title: 'Daily plan',
-            body: widget.dailyPlan == null
-                ? 'Hydrate well, complete one meditation session, log your mood, and take one short mindful break.'
-                : _summarizeDailyPlan(widget.dailyPlan!),
-            icon: Icons.event_note_outlined,
-          ),
-          const SizedBox(height: 10),
-          const _TodayTaskCompletedCard(),
-          const SizedBox(height: 10),
-          _InfoCard(
-            title: 'Mood history',
-            body: _summarizeMoodHistory(widget.moodHistory),
-            icon: Icons.timeline_outlined,
-          ),
           const SizedBox(height: 14),
-          _SectionHeader(
-            title: 'Meditation progress',
-            subtitle: 'Live signals update after chat, hydration and sound.',
-          ),
-          const SizedBox(height: 10),
-          _InfoCard(
-            title: 'Current wellness signal',
-            body:
-                'Stress ${widget.clinicalEngine.stressScore} • mood ${widget.clinicalEngine.moodTrend} • emotion ${widget.clinicalEngine.emotion} • confidence ${(widget.clinicalEngine.confidence * 100).round()}%',
-            icon: Icons.self_improvement_outlined,
-          ),
-          const SizedBox(height: 10),
-          _InfoCard(
-            title: 'Live recommendations',
-            body: widget.clinicalEngine.recommendations.isEmpty
-                ? 'Send an AI message, log hydration, or complete a meditation to update recommendations.'
-                : widget.clinicalEngine.recommendations.join('\n'),
-            icon: Icons.auto_awesome,
-          ),
-          const SizedBox(height: 10),
-          _InfoCard(
-            title: 'Calm practice',
-            body:
-                'Grounding: ${widget.clinicalEngine.groundingSuggestions.isEmpty ? 'Try 4-4-4 breathing for 3 minutes.' : widget.clinicalEngine.groundingSuggestions.join(' • ')}\n\nSleep: ${widget.clinicalEngine.sleepSuggestions.isEmpty ? 'Keep a consistent sleep time and reduce screen use before bed.' : widget.clinicalEngine.sleepSuggestions.join(' • ')}',
-            icon: Icons.spa_outlined,
-          ),
+          const _TodayTaskCompletedCard(),
+          const SizedBox(height: 14),
         ],
       ),
     );
@@ -1236,6 +1134,27 @@ class _TodayTaskCompletedCardState extends State<_TodayTaskCompletedCard> {
     return '${now.year}-${now.month}-${now.day}';
   }
 
+  bool _isYesterday(String? dateKey) {
+    if (dateKey == null || dateKey.isEmpty) return false;
+
+    final parts = dateKey.split('-');
+    if (parts.length != 3) return false;
+
+    final savedDate = DateTime.tryParse(
+      '${parts[0]}-${parts[1].padLeft(2, '0')}-${parts[2].padLeft(2, '0')}',
+    );
+
+    if (savedDate == null) return false;
+
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 1));
+
+    return savedDate.year == yesterday.year &&
+        savedDate.month == yesterday.month &&
+        savedDate.day == yesterday.day;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1246,7 +1165,14 @@ class _TodayTaskCompletedCardState extends State<_TodayTaskCompletedCard> {
     final prefs = await SharedPreferences.getInstance();
     final lastCompletedDate =
         prefs.getString('mindcare_last_task_completed_date');
-    final streak = prefs.getInt('mindcare_task_streak') ?? 0;
+    var streak = prefs.getInt('mindcare_task_streak') ?? 0;
+
+    if (lastCompletedDate != null &&
+        lastCompletedDate != _todayKey &&
+        !_isYesterday(lastCompletedDate)) {
+      streak = 0;
+      await prefs.setInt('mindcare_task_streak', 0);
+    }
 
     if (!mounted) return;
     setState(() {
@@ -1264,7 +1190,8 @@ class _TodayTaskCompletedCardState extends State<_TodayTaskCompletedCard> {
       return;
     }
 
-    final newStreak = (prefs.getInt('mindcare_task_streak') ?? 0) + 1;
+    final currentStreak = prefs.getInt('mindcare_task_streak') ?? 0;
+    final newStreak = _isYesterday(lastCompletedDate) ? currentStreak + 1 : 1;
 
     await prefs.setString('mindcare_last_task_completed_date', _todayKey);
     await prefs.setInt('mindcare_task_streak', newStreak);
@@ -1302,8 +1229,8 @@ class _TodayTaskCompletedCardState extends State<_TodayTaskCompletedCard> {
           Expanded(
             child: Text(
               _completed
-                  ? 'Great job! Today’s task is completed. Current streak: $_streak day(s).'
-                  : 'Complete water, meditation and mood check-in to grow your streak.',
+                  ? 'Water streak: Day $_streak completed.'
+                  : 'Keep your mind hydrated to think positive and maintain your streak.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF334155),
