@@ -4359,9 +4359,13 @@ class _SupportTabState extends State<SupportTab> {
   }
 
   Future<void> _acceptPracticeRequest(_SupportPerson person) async {
-    setState(() => _friendsSubTab = 1);
+    setState(() {
+      _tab = 1;
+      _friendsSubTab = 1;
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Open Request tab to accept this request.')),
+      SnackBar(content: Text('Respond to ${person.name} in Request tab.')),
     );
   }
 
@@ -4373,6 +4377,9 @@ class _SupportTabState extends State<SupportTab> {
         SnackBar(content: Text('${request.name} is now your friend.')),
       );
       await _loadSupportData();
+      if (mounted) {
+        setState(() => _friendsSubTab = 0);
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

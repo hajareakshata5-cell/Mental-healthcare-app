@@ -21,11 +21,48 @@ const sendFriendRequest = asyncHandler(async (req, res) => {
   }
 
   const existing = await FriendRequest.findOne({
-    senderId,
-    receiverId,
+    $or: [
+      { senderId, receiverId },
+      { senderId: receiverId, receiverId: senderId },
+    ],
   });
 
   if (existing) {
+    if (existing.status === "accepted") {
+      return res.status(200).json({
+        success: true,
+        request: existing,
+        message: "Already friends",
+      });
+    }
+
+    if (
+      existing.status === "pending" &&
+      existing.senderId.toString() === receiverId.toString()
+    ) {
+      existing.status = "accepted";
+      await existing.save();
+
+      return res.status(200).json({
+        success: true,
+        request: existing,
+        message: "Friend request accepted",
+      });
+    }
+
+    if (existing.status === "rejected") {
+      existing.senderId = senderId;
+      existing.receiverId = receiverId;
+      existing.status = "pending";
+      await existing.save();
+
+      return res.status(200).json({
+        success: true,
+        request: existing,
+        message: "Friend request sent again",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       request: existing,
@@ -44,7 +81,6 @@ const sendFriendRequest = asyncHandler(async (req, res) => {
     request,
   });
 });
-
 const getFriendRequests = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
@@ -52,14 +88,14 @@ const getFriendRequests = asyncHandler(async (req, res) => {
     receiverId: userId,
     status: "pending",
   })
-    .populate("senderId", "alias email displayName")
+    .populate("senderId", "alias email displayName username")
     .sort({ createdAt: -1 });
 
   const outgoing = await FriendRequest.find({
     senderId: userId,
     status: "pending",
   })
-    .populate("receiverId", "alias email displayName")
+    .populate("receiverId", "alias email displayName username")
     .sort({ createdAt: -1 });
 
   return res.status(200).json({
@@ -110,8 +146,8 @@ const getFriends = asyncHandler(async (req, res) => {
     status: "accepted",
     $or: [{ senderId: userId }, { receiverId: userId }],
   })
-    .populate("senderId", "alias email displayName")
-    .populate("receiverId", "alias email displayName")
+    .populate("senderId", "alias email displayName username")
+.populate("receiverId", "alias email displayName username")
     .sort({ updatedAt: -1 });
 
   const friends = accepted.map((request) => {
