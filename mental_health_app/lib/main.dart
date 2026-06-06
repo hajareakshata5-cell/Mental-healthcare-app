@@ -3929,10 +3929,10 @@ class SoundTherapyTab extends StatelessWidget {
                   children: [
                     const SizedBox(height: 14),
                     _InfoCard(
-                      title: 'Mood-aware recommendation',
+                      title: 'Sound Streak',
                       body:
-                          'Signal: ${signal.moodHint} / ${signal.riskLevel} / ${signal.emotion}. ${_soundRecommendationText(signal)}',
-                      icon: Icons.auto_awesome,
+                          'Day ${service.soundStreakDays}. Keep your mental health healthy and maintain your streak.',
+                      icon: Icons.local_fire_department_outlined,
                     ),
                   ],
                 ),
