@@ -4517,6 +4517,129 @@ class _SupportTabState extends State<SupportTab> {
     }
   }
 
+  Future<void> _removeFriend(_SupportPerson person) async {
+    try {
+      await _api.removeFriend(friendId: person.id);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${person.name} removed from friends.')),
+      );
+
+      await _loadSupportData();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Remove failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _blockFriend(_SupportPerson person) async {
+    try {
+      await _api.blockUser(userId: person.id);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${person.name} blocked.')),
+      );
+
+      await _loadSupportData();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Block failed: $error')),
+      );
+    }
+  }
+
+  void _showFriendActions(_SupportPerson person) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF111827),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4B5563),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    _SupportAvatar(name: person.name, color: person.color),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        person.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.person_remove_outlined,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  title: const Text(
+                    'Remove Friend',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _removeFriend(person);
+                  },
+                ),
+                const Divider(color: Color(0xFF374151)),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.block,
+                    color: Color(0xFFEF4444),
+                  ),
+                  title: const Text(
+                    'Block User',
+                    style: TextStyle(
+                      color: Color(0xFFEF4444),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockFriend(person);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _startCall(_SupportPerson person) async {
     if (!await _ensureCallToken()) return;
 
@@ -4786,7 +4909,11 @@ class _SupportTabState extends State<SupportTab> {
               ),
             ),
           for (final friend in _friends) ...[
-            _OnlineFriendTile(person: friend, onCall: () => _startCall(friend)),
+            _OnlineFriendTile(
+              person: friend,
+              onCall: () => _startCall(friend),
+              onProfileTap: () => _showFriendActions(friend),
+            ),
             const SizedBox(height: 24),
           ],
         ] else ...[
@@ -5510,24 +5637,40 @@ class _FriendSubTab extends StatelessWidget {
 }
 
 class _OnlineFriendTile extends StatelessWidget {
-  const _OnlineFriendTile({required this.person, required this.onCall});
+  const _OnlineFriendTile({
+    required this.person,
+    required this.onCall,
+    required this.onProfileTap,
+  });
 
   final _SupportPerson person;
   final VoidCallback onCall;
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _SupportAvatar(name: person.name, color: person.color),
+        InkWell(
+          onTap: onProfileTap,
+          borderRadius: BorderRadius.circular(999),
+          child: _SupportAvatar(name: person.name, color: person.color),
+        ),
         const SizedBox(width: 16),
         Expanded(
-          child: Text(
-            person.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.w600,
+          child: InkWell(
+            onTap: onProfileTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                person.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 23,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),

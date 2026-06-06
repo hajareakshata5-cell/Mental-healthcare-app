@@ -522,6 +522,24 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> removeFriend({
+    required String friendId,
+  }) async {
+    return _postJson(
+      _apiUri('/friends/remove'),
+      body: {'friendId': friendId},
+    );
+  }
+
+  Future<Map<String, dynamic>> blockUser({
+    required String userId,
+  }) async {
+    return _postJson(
+      _apiUri('/friends/block'),
+      body: {'userId': userId},
+    );
+  }
+
   Future<Map<String, dynamic>> getAvailableUsers() async {
     try {
       return await _getJson(_apiUri('/users/available'));

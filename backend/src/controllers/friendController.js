@@ -147,7 +147,7 @@ const getFriends = asyncHandler(async (req, res) => {
     $or: [{ senderId: userId }, { receiverId: userId }],
   })
     .populate("senderId", "alias email displayName username")
-.populate("receiverId", "alias email displayName username")
+    .populate("receiverId", "alias email displayName username")
     .sort({ updatedAt: -1 });
 
   const friends = accepted.map((request) => {
@@ -162,9 +162,69 @@ const getFriends = asyncHandler(async (req, res) => {
   });
 });
 
+const removeFriend = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { friendId } = req.body;
+
+  if (!friendId) {
+    throw new ApiError(400, "friendId is required");
+  }
+
+  const result = await FriendRequest.deleteOne({
+    status: "accepted",
+    $or: [
+      { senderId: userId, receiverId: friendId },
+      { senderId: friendId, receiverId: userId },
+    ],
+  });
+
+  return res.status(200).json({
+    success: true,
+    removed: result.deletedCount > 0,
+    message: "Friend removed",
+  });
+});
+
+const blockUser = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const targetUserId = req.body.userId || req.body.friendId;
+
+  if (!targetUserId) {
+    throw new ApiError(400, "userId is required");
+  }
+
+  if (userId.toString() === targetUserId.toString()) {
+    throw new ApiError(400, "You cannot block yourself");
+  }
+
+  const targetUser = await User.findById(targetUserId);
+  if (!targetUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  await User.findByIdAndUpdate(userId, {
+    $addToSet: { blockedUsers: targetUserId },
+  });
+
+  await FriendRequest.deleteMany({
+    $or: [
+      { senderId: userId, receiverId: targetUserId },
+      { senderId: targetUserId, receiverId: userId },
+    ],
+  });
+
+  return res.status(200).json({
+    success: true,
+    blocked: true,
+    message: "User blocked",
+  });
+});
+
 module.exports = {
   sendFriendRequest,
   getFriendRequests,
   respondFriendRequest,
   getFriends,
+  removeFriend,
+  blockUser,
 };

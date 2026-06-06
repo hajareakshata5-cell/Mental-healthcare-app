@@ -239,6 +239,15 @@ lastSeenForMatchingAt: {
       type: Boolean,
       default: false,
   },
+
+  blockedUsers: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    index: true,
+  },
+],
+
     isActive: {
       type: Boolean,
       default: true,
