@@ -358,6 +358,16 @@ async function hasActiveFriendCall(userId) {
   return true;
 }
 
+function hasBlockedBetween(userA, userB) {
+  const userABlocks = (userA?.blockedUsers || []).map((id) => id.toString());
+  const userBBlocks = (userB?.blockedUsers || []).map((id) => id.toString());
+
+  return (
+    userABlocks.includes(userB._id.toString()) ||
+    userBBlocks.includes(userA._id.toString())
+  );
+}
+
 function buildCallJoinPayload({ callLog, currentUser, peerUser }) {
   const uid = agoraUidFromUserId(currentUser._id);
   const token = buildAgoraToken(callLog.channelName, uid);
@@ -391,13 +401,19 @@ const requestFriendCall = asyncHandler(async (req, res) => {
     throw new ApiError(400, "You cannot call yourself");
   }
 
-  const receiver = await User.findById(targetUserId).select(
-    "-passwordHash",
-  );
+  const receiver = await User.findById(targetUserId).select("-passwordHash");
 
   if (!receiver) {
     throw new ApiError(404, "Friend not found");
   }
+
+  if (hasBlockedBetween(caller, receiver)) {
+  return res.status(403).json({
+    success: false,
+    status: "blocked",
+    message: "You cannot call this user",
+  });
+}
 
   const receiverBusy = await hasActiveFriendCall(receiver._id);
 
@@ -493,11 +509,11 @@ const getIncomingFriendCall = asyncHandler(async (req, res) => {
   }
 
   const callLog = await CallLog.findOne({
-    targetUserId: receiver._id,
-    status: "pending",
-  })
-    .sort({ createdAt: -1 })
-    .populate("userId", "username displayName anonymousAlias");
+  targetUserId: receiver._id,
+  status: "pending",
+})
+  .sort({ createdAt: -1 })
+  .populate("userId", "username displayName anonymousAlias blockedUsers");
 
   if (!callLog) {
     return res.status(200).json({
@@ -506,6 +522,17 @@ const getIncomingFriendCall = asyncHandler(async (req, res) => {
       call: null,
     });
   }
+
+  if (callLog.userId && hasBlockedBetween(receiver, callLog.userId)) {
+  callLog.status = "blocked";
+  await callLog.save();
+
+  return res.status(200).json({
+    success: true,
+    hasIncomingCall: false,
+    call: null,
+  });
+}
 
   if (isExpiredCall(callLog)) {
     callLog.status = "missed";
