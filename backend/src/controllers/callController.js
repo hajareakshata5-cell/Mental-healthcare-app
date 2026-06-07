@@ -452,6 +452,12 @@ if (receiverBusy) {
     .sort()
     .join("_")}_${Date.now()}`;
 
+  const callerAgoraUid = agoraUidFromUserId(caller._id);
+  const callerAgoraToken = buildAgoraToken(channelName, callerAgoraUid);
+
+  const receiverAgoraUid = agoraUidFromUserId(receiver._id);
+  const receiverAgoraToken = buildAgoraToken(channelName, receiverAgoraUid);
+
   const callLog = await CallLog.create({
     userId: caller._id,
     targetUserId: receiver._id,
@@ -479,6 +485,8 @@ if (receiverBusy) {
           callerId: caller._id.toString(),
           callerName: displayUserName(caller),
           channelName,
+          agoraToken: receiverAgoraToken,
+          agoraUid: String(receiverAgoraUid),
           callType: type,
         },
       });
@@ -495,6 +503,8 @@ if (receiverBusy) {
       peerName: displayUserName(receiver),
       peerId: receiver._id,
       channelName,
+      agoraToken: callerAgoraToken,
+      agoraUid: callerAgoraUid,
       callType: type,
       timeoutSeconds: Math.floor(FRIEND_CALL_TIMEOUT_MS / 1000),
     },
