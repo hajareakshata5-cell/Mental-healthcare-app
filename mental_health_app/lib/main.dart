@@ -4874,7 +4874,7 @@ class _SupportTabState extends State<SupportTab> {
           Row(
             children: [
               Text(
-                'Online Friends (${_friends.length})',
+                'Friends (${_friends.length})',
                 style: const TextStyle(
                   color: Color(0xFF9CA3AF),
                   fontSize: 22,
