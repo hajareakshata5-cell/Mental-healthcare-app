@@ -345,12 +345,28 @@ async function hasActiveFriendCall(userId) {
   const activeCall = await CallLog.findOne({
     status: { $in: ["pending", "accepted", "connected"] },
     $or: [{ userId }, { targetUserId: userId }],
-  });
+  }).sort({ updatedAt: -1, createdAt: -1 });
 
   if (!activeCall) return false;
 
-  if (activeCall.status === "pending" && isExpiredCall(activeCall)) {
+  const lastActivityAt = activeCall.updatedAt || activeCall.acceptedAt || activeCall.createdAt;
+  const ageMs = Date.now() - new Date(lastActivityAt).getTime();
+
+  if (activeCall.status === "pending" && ageMs > FRIEND_CALL_TIMEOUT_MS) {
     activeCall.status = "missed";
+    activeCall.endedAt = new Date();
+    await activeCall.save();
+    return false;
+  }
+
+  // Safety cleanup: prevents users from being permanently busy after crash/failed join.
+  const staleConnectedMs = 90 * 60 * 1000;
+  if (
+    (activeCall.status === "accepted" || activeCall.status === "connected") &&
+    ageMs > staleConnectedMs
+  ) {
+    activeCall.status = "ended";
+    activeCall.endedAt = new Date();
     await activeCall.save();
     return false;
   }

@@ -211,8 +211,9 @@ class _FriendRingingScreenState extends State<FriendRingingScreen> {
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 56, 28, 34),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
               CircleAvatar(
@@ -394,8 +395,9 @@ class _IncomingFriendCallScreenState extends State<IncomingFriendCallScreen> {
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 56, 28, 34),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
               CircleAvatar(
@@ -475,8 +477,9 @@ class _FriendUnavailableView extends StatelessWidget {
       backgroundColor: const Color(0xFF111827),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 56, 28, 34),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Spacer(),
               CircleAvatar(
