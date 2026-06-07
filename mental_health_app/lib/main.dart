@@ -4151,6 +4151,7 @@ class _SupportTabState extends State<SupportTab> {
       if (raw is! Map) continue;
 
       final possiblePeerIds = <String>[
+        _userIdFrom(raw['userId']),
         _userIdFrom(raw['targetUserId']),
         _userIdFrom(raw['peerId']),
         _userIdFrom(raw['receiverId']),
@@ -4676,7 +4677,12 @@ class _SupportTabState extends State<SupportTab> {
             _SupportProfileHeader(displayName: _displayName),
             _SupportMainTabs(
               selected: _tab,
-              onChanged: (value) => setState(() => _tab = value),
+              onChanged: (value) {
+                setState(() => _tab = value);
+                if (value == 1) {
+                  _loadSupportData();
+                }
+              },
             ),
             if (_supportError != null)
               Container(
@@ -4839,7 +4845,10 @@ class _SupportTabState extends State<SupportTab> {
                 label: 'Request',
                 icon: Icons.group_add_outlined,
                 active: showRequests,
-                onTap: () => setState(() => _friendsSubTab = 1),
+                onTap: () {
+                  setState(() => _friendsSubTab = 1);
+                  _loadSupportData();
+                },
               ),
             ),
           ],
