@@ -15,6 +15,10 @@ const getAvailableUsers = asyncHandler(async (req, res) => {
       $nin: [currentUserId, ...blockedByMe],
     },
     blockedUsers: { $ne: currentUserId },
+
+    // Hide old guest users from practice/available list
+    authProvider: { $ne: "guest" },
+    username: { $not: /^guest_/i },
   })
     .select("_id alias username email displayName isSubscribed createdAt")
     .sort({ createdAt: -1 })
