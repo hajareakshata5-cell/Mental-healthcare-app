@@ -469,6 +469,65 @@ function buildCallJoinPayload({ callLog, currentUser, peerUser }) {
   };
 }
 
+const cleanupStaleFriendCallsForUsers = async (callerId, receiverId) => {
+  const now = new Date();
+
+  const shortStaleTime = new Date(Date.now() - 90 * 1000);
+  const longStaleTime = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+  await CallLog.updateMany(
+    {
+      $or: [
+        { userId: callerId },
+        { targetUserId: callerId },
+        { userId: receiverId },
+        { targetUserId: receiverId },
+      ],
+      status: { $in: ["pending", "ringing"] },
+      createdAt: { $lt: shortStaleTime },
+    },
+    {
+      $set: {
+        status: "missed",
+        endedAt: now,
+      },
+    },
+  );
+
+  await CallLog.updateMany(
+    {
+      $or: [
+        { userId: callerId },
+        { targetUserId: callerId },
+        { userId: receiverId },
+        { targetUserId: receiverId },
+      ],
+      status: { $in: ["accepted", "connected"] },
+      createdAt: { $lt: longStaleTime },
+    },
+    {
+      $set: {
+        status: "ended",
+        endedAt: now,
+      },
+    },
+  );
+
+  await CallLog.updateMany(
+    {
+      userId: callerId,
+      targetUserId: receiverId,
+      status: { $in: ["pending", "ringing", "busy"] },
+    },
+    {
+      $set: {
+        status: "cancelled",
+        endedAt: now,
+      },
+    },
+  );
+};
+
 const requestFriendCall = asyncHandler(async (req, res) => {
   const caller = await User.findById(req.user._id).select("-passwordHash");
 
@@ -499,6 +558,13 @@ const requestFriendCall = asyncHandler(async (req, res) => {
     message: "You cannot call this user",
   });
 }
+
+  await cleanupStaleFriendCallsForUsers(caller._id, receiver._id);
+
+  console.log("[friend-call] stale cleanup done", {
+    callerId: caller._id.toString(),
+    receiverId: receiver._id.toString(),
+  });
 
   const receiverBusy = await hasActiveFriendCall(receiver._id);
 
