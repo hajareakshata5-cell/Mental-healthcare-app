@@ -180,6 +180,21 @@ const randomMatch = asyncHandler(async (req, res) => {
     timeoutSeconds: 120,
   });
 });
+
+function buildSafeFriendChannelName(callerId, receiverId) {
+  const callerPart = String(callerId || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-6);
+
+  const receiverPart = String(receiverId || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-6);
+
+  const timePart = Date.now().toString(36);
+
+  return `mcfr_${callerPart}_${receiverPart}_${timePart}`;
+}
+
 function agoraUidFromUserId(userId) {
   const raw = String(userId || "1").replace(/[^a-fA-F0-9]/g, "");
   const shortHex = raw.slice(-8) || "1";
@@ -515,12 +530,10 @@ if (receiverBusy) {
 
   const type = req.body.type === "video" ? "video" : "audio";
 
-  const channelName = `mindcare_friend_${[
-    caller._id.toString(),
-    receiver._id.toString(),
-  ]
-    .sort()
-    .join("_")}_${Date.now()}`;
+  const channelName = buildSafeFriendChannelName(
+  caller._id.toString(),
+  receiver._id.toString(),
+);
 
   const callerAgoraUid = agoraUidFromUserId(caller._id);
   const callerAgoraToken = buildAgoraToken(channelName, callerAgoraUid);
