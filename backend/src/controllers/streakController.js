@@ -67,17 +67,17 @@ const completeDailyStreak = asyncHandler(async (req, res) => {
   ]);
 
   const totalSeconds = callAgg[0]?.totalSeconds || 0;
-  const hasTenMinCall = totalSeconds >= 10 * 60;
+  const hasTwentyMinCall = totalSeconds >= 20 * 60;
 
   const waterCompleted =
     req.body.waterCompleted === true ||
     req.body.waterCompleted === "true";
 
- if (!hasTenMinCall || !waterCompleted) {
+ if (!hasTwentyMinCall || !waterCompleted) {
   return res.status(200).json({
     success: true,
     completed: false,
-    reason: "Need 10 minutes call and completed water intake task",
+    reason: "Need 20 minutes call and completed water intake task",
     requirements: {
       callMinutes: Math.floor(totalSeconds / 60),
       waterCompleted,

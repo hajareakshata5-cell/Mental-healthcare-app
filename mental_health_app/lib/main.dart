@@ -4068,7 +4068,7 @@ class _SupportTabState extends State<SupportTab> {
         _streakMessage = data['completed'] == true
             ? 'Day ${_streakData?['currentStreak'] ?? 1} streak completed!'
             : data['reason']?.toString() ??
-                'Complete 10 min call + water task to unlock streak.';
+                'Complete 20 min call + water task to unlock streak.';
       });
     } catch (e) {
       if (!mounted) return;
