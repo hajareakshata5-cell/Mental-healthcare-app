@@ -192,12 +192,55 @@ function agoraUidFromUserId(userId) {
   return (parsed % 2000000000) + 1;
 }
 
+function cleanEnvValue(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+}
+
 function buildAgoraToken(channelName, uid) {
-  const appId = process.env.AGORA_APP_ID;
-  const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+  const appId = cleanEnvValue(process.env.AGORA_APP_ID);
+  const appCertificate = cleanEnvValue(process.env.AGORA_APP_CERTIFICATE);
+  const safeChannelName = String(channelName || "").trim();
+  const safeUid = Number(uid);
 
   if (!appId || !appCertificate) {
-    return "";
+    console.error("[agora] missing credentials", {
+      hasAppId: Boolean(appId),
+      appIdLength: appId.length,
+      hasCertificate: Boolean(appCertificate),
+      certificateLength: appCertificate.length,
+    });
+
+    throw new ApiError(
+      500,
+      "Agora calling is not configured on server.",
+    );
+  }
+
+  if (appId.length !== 32 || appCertificate.length !== 32) {
+    console.error("[agora] invalid credential length", {
+      appIdLength: appId.length,
+      certificateLength: appCertificate.length,
+      appIdPreview: appId.slice(0, 6),
+    });
+
+    throw new ApiError(
+      500,
+      "Agora calling credentials are invalid on server.",
+    );
+  }
+
+  if (!safeChannelName || !Number.isFinite(safeUid) || safeUid <= 0) {
+    console.error("[agora] invalid join params", {
+      channelNamePresent: Boolean(safeChannelName),
+      uid: safeUid,
+    });
+
+    throw new ApiError(
+      500,
+      "Agora call join details are invalid.",
+    );
   }
 
   const role = RtcRole.PUBLISHER;
@@ -205,15 +248,26 @@ function buildAgoraToken(channelName, uid) {
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const privilegeExpiredTs = currentTimestamp + expireSeconds;
 
-  return RtcTokenBuilder.buildTokenWithUid(
+  const token = RtcTokenBuilder.buildTokenWithUid(
     appId,
     appCertificate,
-    channelName,
-    uid,
+    safeChannelName,
+    safeUid,
     role,
     privilegeExpiredTs,
   );
+
+  console.log("[agora] token-built", {
+    channelName: safeChannelName,
+    uid: safeUid,
+    tokenLength: token.length,
+    appIdPreview: appId.slice(0, 6),
+    hasCertificate: true,
+  });
+
+  return token;
 }
+
 const startCall = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("-passwordHash");
 
