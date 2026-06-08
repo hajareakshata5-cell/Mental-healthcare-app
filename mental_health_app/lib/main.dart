@@ -3959,6 +3959,8 @@ class _SupportTabState extends State<SupportTab> {
     _SupportWeekBar('THU', 0, 0),
     _SupportWeekBar('FRI', 0, 0),
   ];
+  static const String _friendsCacheKey = 'support_friends_cache_v1';
+  static const String _practiceCacheKey = 'support_practice_cache_v1';
 
   String get _displayName =>
       widget.sessionService.user?.displayName ??
@@ -3971,6 +3973,7 @@ class _SupportTabState extends State<SupportTab> {
   @override
   void initState() {
     super.initState();
+    _restoreSupportPeopleCache();
     _loadSupportData();
     _loadStreak();
     _startIncomingFriendCallPolling();
@@ -4008,10 +4011,31 @@ class _SupportTabState extends State<SupportTab> {
       final users = availableUsers is List ? availableUsers : const [];
       final friendList = friends is List ? friends : const [];
 
+      final usersFallback = results[2]['offlineFallback'] == true;
+      final friendsFallback = results[4]['offlineFallback'] == true;
+
       _rebuildWeeklyBars(calls);
-      _applyAvailableUsers(users, calls, friendList, requests);
-      _applyFriends(friendList);
+
+      if (!usersFallback) {
+        _applyAvailableUsers(users, calls, friendList, requests);
+      }
+
+      final recentFromCalls = _recentPracticeFromCalls(
+        calls,
+        friendList,
+        requests,
+      );
+
+      for (final person in recentFromCalls) {
+        _upsertPracticePerson(person);
+      }
+
+      if (!friendsFallback) {
+        _applyFriends(friendList);
+      }
+
       _applyRequests(requests);
+      await _saveSupportPeopleCache();
 
       if (progress is Map<String, dynamic>) {
         _practiceCalls = _asInt(progress['totalCalls']);
@@ -4094,6 +4118,225 @@ class _SupportTabState extends State<SupportTab> {
     if (value is double) return value;
     if (value is int) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _relationName(_SupportRelation relation) {
+    return relation.toString().split('.').last;
+  }
+
+  _SupportRelation _relationFromName(String value) {
+    switch (value) {
+      case 'friend':
+        return _SupportRelation.friend;
+      case 'incoming':
+        return _SupportRelation.incoming;
+      case 'sent':
+        return _SupportRelation.sent;
+      default:
+        return _SupportRelation.none;
+    }
+  }
+
+  Map<String, dynamic> _supportPersonToCache(_SupportPerson person) {
+    return {
+      'id': person.id,
+      'name': person.name,
+      'subtitle': person.callSummary,
+      'relation': _relationName(person.relation),
+      'online': person.online,
+      'lastDurationSeconds': person.lastDurationSeconds,
+    };
+  }
+
+  _SupportPerson? _supportPersonFromCache(dynamic raw) {
+    if (raw is! Map) return null;
+
+    final id = raw['id']?.toString() ?? '';
+    final name = raw['name']?.toString() ?? 'Co-learner';
+
+    if (id.trim().isEmpty) return null;
+
+    final relation = _relationFromName(raw['relation']?.toString() ?? 'none');
+    final duration = _asInt(raw['lastDurationSeconds']);
+
+    return _SupportPerson(
+      id,
+      _cleanPeerName(name),
+      raw['subtitle']?.toString() ??
+          (duration > 0
+              ? 'Last call ${_formatDuration(duration)}'
+              : 'Co-learner'),
+      relation,
+      _colorForName(name),
+      raw['online'] == true,
+      duration,
+    );
+  }
+
+  Future<void> _restoreSupportPeopleCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final friendsRaw = prefs.getString(_friendsCacheKey);
+      final practiceRaw = prefs.getString(_practiceCacheKey);
+
+      final cachedFriends = <_SupportPerson>[];
+      final cachedPractice = <_SupportPerson>[];
+
+      if (friendsRaw != null && friendsRaw.isNotEmpty) {
+        final decoded = jsonDecode(friendsRaw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            final person = _supportPersonFromCache(item);
+            if (person != null) cachedFriends.add(person);
+          }
+        }
+      }
+
+      if (practiceRaw != null && practiceRaw.isNotEmpty) {
+        final decoded = jsonDecode(practiceRaw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            final person = _supportPersonFromCache(item);
+            if (person != null) cachedPractice.add(person);
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        if (_friends.isEmpty && cachedFriends.isNotEmpty) {
+          _friends
+            ..clear()
+            ..addAll(cachedFriends);
+        }
+
+        if (_practiceUsers.isEmpty && cachedPractice.isNotEmpty) {
+          _practiceUsers
+            ..clear()
+            ..addAll(cachedPractice);
+        }
+      });
+    } catch (error) {
+      debugPrint('Support cache restore failed: $error');
+    }
+  }
+
+  Future<void> _saveSupportPeopleCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final permanentFriends =
+          _friends.map(_supportPersonToCache).toList(growable: false);
+
+      final recentPractice = _practiceUsers
+          .where((person) => person.lastDurationSeconds > 0)
+          .map(_supportPersonToCache)
+          .toList(growable: false);
+
+      await prefs.setString(_friendsCacheKey, jsonEncode(permanentFriends));
+      await prefs.setString(_practiceCacheKey, jsonEncode(recentPractice));
+    } catch (error) {
+      debugPrint('Support cache save failed: $error');
+    }
+  }
+
+  void _upsertPracticePerson(_SupportPerson person) {
+    final index = _practiceUsers.indexWhere((item) => item.id == person.id);
+
+    if (index >= 0) {
+      final existing = _practiceUsers[index];
+
+      _practiceUsers[index] = _SupportPerson(
+        person.id,
+        person.name,
+        person.callSummary,
+        person.relation != _SupportRelation.none
+            ? person.relation
+            : existing.relation,
+        person.color,
+        person.online || existing.online,
+        person.lastDurationSeconds > 0
+            ? person.lastDurationSeconds
+            : existing.lastDurationSeconds,
+      );
+    } else {
+      _practiceUsers.add(person);
+    }
+  }
+
+  List<_SupportPerson> _recentPracticeFromCalls(
+    List<dynamic> calls,
+    List<dynamic> friends,
+    Map<String, dynamic> requests,
+  ) {
+    final friendIds = _friendIdsFrom(friends);
+    final outgoingIds = _outgoingReceiverIds(requests);
+    final incomingIds = _incomingSenderIds(requests);
+    final recent = <String, _SupportPerson>{};
+
+    final sortedCalls = List<dynamic>.from(calls);
+    sortedCalls.sort((a, b) {
+      final aDate = a is Map
+          ? DateTime.tryParse((a['createdAt'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0)
+          : DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b is Map
+          ? DateTime.tryParse((b['createdAt'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0)
+          : DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+
+    for (final raw in sortedCalls) {
+      if (raw is! Map) continue;
+
+      final possibleIds = <String>[
+        _userIdFrom(raw['targetUserId']),
+        _userIdFrom(raw['peerId']),
+        _userIdFrom(raw['receiverId']),
+        _userIdFrom(raw['senderId']),
+        _userIdFrom(raw['userId']),
+      ].where((id) => id.isNotEmpty).toList();
+
+      if (possibleIds.isEmpty) continue;
+
+      final id = possibleIds.first;
+      if (recent.containsKey(id)) continue;
+
+      final rawName = raw['peerAlias'] ??
+          raw['peerName'] ??
+          raw['name'] ??
+          raw['displayName'] ??
+          raw['alias'] ??
+          'Co-learner';
+
+      final name = _cleanPeerName(rawName.toString());
+      final duration = _asInt(raw['durationSeconds']);
+
+      if (duration <= 0) continue;
+
+      final relation = friendIds.contains(id)
+          ? _SupportRelation.friend
+          : incomingIds.contains(id)
+              ? _SupportRelation.incoming
+              : outgoingIds.contains(id)
+                  ? _SupportRelation.sent
+                  : _SupportRelation.none;
+
+      recent[id] = _SupportPerson(
+        id,
+        name,
+        'Last call ${_formatDuration(duration)}',
+        relation,
+        _colorForName(name),
+        false,
+        duration,
+      );
+    }
+
+    return recent.values.toList(growable: false);
   }
 
   String _userIdFrom(dynamic raw) {
@@ -4190,12 +4433,23 @@ class _SupportTabState extends State<SupportTab> {
     final outgoingIds = _outgoingReceiverIds(requests);
     final incomingIds = _incomingSenderIds(requests);
 
+    final existingRecent = _practiceUsers
+        .where((person) => person.lastDurationSeconds > 0)
+        .toList(growable: false);
+
     _practiceUsers.clear();
+
+    for (final person in existingRecent) {
+      _upsertPracticePerson(person);
+    }
+
     for (final raw in users) {
       final id = _userIdFrom(raw);
       if (id.isEmpty) continue;
+
       final name = _userNameFrom(raw);
       final duration = _lastDurationForUser(id, name, calls);
+
       final relation = friendIds.contains(id)
           ? _SupportRelation.friend
           : incomingIds.contains(id)
@@ -4203,7 +4457,8 @@ class _SupportTabState extends State<SupportTab> {
               : outgoingIds.contains(id)
                   ? _SupportRelation.sent
                   : _SupportRelation.none;
-      _practiceUsers.add(
+
+      _upsertPracticePerson(
         _SupportPerson(
           id,
           name,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -517,8 +518,14 @@ class ApiService {
   Future<Map<String, dynamic>> getFriends() async {
     try {
       return await _getJson(_apiUri('/friends'));
-    } catch (_) {
-      return {'success': true, 'friends': []};
+    } catch (error) {
+      debugPrint('getFriends failed: $error');
+      return {
+        'success': false,
+        'friends': [],
+        'offlineFallback': true,
+        'message': 'Friends could not be loaded',
+      };
     }
   }
 
@@ -543,8 +550,14 @@ class ApiService {
   Future<Map<String, dynamic>> getAvailableUsers() async {
     try {
       return await _getJson(_apiUri('/users/available'));
-    } catch (_) {
-      return {'success': true, 'users': []};
+    } catch (error) {
+      debugPrint('getAvailableUsers failed: $error');
+      return {
+        'success': false,
+        'users': [],
+        'offlineFallback': true,
+        'message': 'Available users could not be loaded',
+      };
     }
   }
 
