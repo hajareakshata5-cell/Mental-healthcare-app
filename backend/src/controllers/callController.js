@@ -552,6 +552,13 @@ if (receiverBusy) {
     channelName,
   });
 
+    console.log("[push] friend call target", {
+    receiverId: receiver._id.toString(),
+    hasFcmToken: Boolean(receiver.fcmToken),
+    pushEnabled: receiver.notificationSettings?.pushEnabled !== false,
+    incomingCalls: receiver.notificationSettings?.incomingCalls !== false,
+  });
+
   if (
     receiver.fcmToken &&
     receiver.notificationSettings?.pushEnabled !== false &&
