@@ -738,11 +738,31 @@ class _MindCareShellState extends State<MindCareShell>
       online: true,
     );
 
+    unawaited(_saveFcmTokenForSession());
+
     if (_socketService.isConnected) {
       return;
     }
 
     _socketService.connect(token, user.id, user.alias);
+  }
+
+  Future<void> _saveFcmTokenForSession() async {
+    final token = widget.sessionService.apiService.authToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final fcmToken = await _pushNotificationService.getToken();
+      if (fcmToken == null || fcmToken.isEmpty) {
+        debugPrint('FCM_SESSION_SAVE_SKIPPED: empty token');
+        return;
+      }
+
+      await widget.sessionService.apiService.saveFcmToken(fcmToken: fcmToken);
+      debugPrint('FCM_SESSION_SAVE_OK');
+    } catch (error) {
+      debugPrint('FCM_SESSION_SAVE_FAILED: $error');
+    }
   }
 
   Future<void> _loadDiagnostics() async {
@@ -4225,6 +4245,8 @@ class _SupportTabState extends State<SupportTab> {
 
   Future<void> _saveSupportPeopleCache() async {
     try {
+      _dedupePracticeUsers();
+
       final prefs = await SharedPreferences.getInstance();
 
       final permanentFriends =
@@ -4240,6 +4262,68 @@ class _SupportTabState extends State<SupportTab> {
     } catch (error) {
       debugPrint('Support cache save failed: $error');
     }
+  }
+
+  String _practicePersonKey(_SupportPerson person) {
+    final cleanId = person.id.trim().toLowerCase();
+    final cleanName =
+        person.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+    if (cleanId.isNotEmpty &&
+        cleanId != 'co_learner' &&
+        cleanId != 'unknown' &&
+        !cleanId.startsWith('temp_')) {
+      return 'id:$cleanId';
+    }
+
+    return 'name:$cleanName';
+  }
+
+  bool _samePracticePerson(_SupportPerson a, _SupportPerson b) {
+    final aName = a.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    final bName = b.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+    if (a.id.trim().isNotEmpty && b.id.trim().isNotEmpty && a.id == b.id) {
+      return true;
+    }
+
+    return aName.isNotEmpty && aName == bName;
+  }
+
+  void _dedupePracticeUsers() {
+    final unique = <_SupportPerson>[];
+
+    for (final person in _practiceUsers) {
+      final index =
+          unique.indexWhere((item) => _samePracticePerson(item, person));
+
+      if (index < 0) {
+        unique.add(person);
+        continue;
+      }
+
+      final existing = unique[index];
+
+      unique[index] = _SupportPerson(
+        existing.id.trim().isNotEmpty ? existing.id : person.id,
+        existing.name != 'Co-learner' ? existing.name : person.name,
+        person.lastDurationSeconds >= existing.lastDurationSeconds
+            ? person.callSummary
+            : existing.callSummary,
+        person.relation != _SupportRelation.none
+            ? person.relation
+            : existing.relation,
+        existing.color,
+        existing.online || person.online,
+        person.lastDurationSeconds >= existing.lastDurationSeconds
+            ? person.lastDurationSeconds
+            : existing.lastDurationSeconds,
+      );
+    }
+
+    _practiceUsers
+      ..clear()
+      ..addAll(unique);
   }
 
   void _upsertPracticePerson(_SupportPerson person) {
@@ -4664,7 +4748,19 @@ class _SupportTabState extends State<SupportTab> {
     var currentToken = widget.sessionService.apiService.authToken;
 
     if (currentToken != null && currentToken.isNotEmpty) {
-      return true;
+      try {
+        await widget.sessionService.runWithSessionRetry(() {
+          return widget.sessionService.apiService.getMe();
+        });
+
+        currentToken = widget.sessionService.apiService.authToken;
+
+        if (currentToken != null && currentToken.isNotEmpty) {
+          return true;
+        }
+      } catch (error) {
+        debugPrint('CALL_AUTH_VALIDATE_FAILED:$error');
+      }
     }
 
     try {
@@ -4677,8 +4773,14 @@ class _SupportTabState extends State<SupportTab> {
       currentToken = widget.sessionService.apiService.authToken;
 
       if (currentToken != null && currentToken.isNotEmpty) {
+        await widget.sessionService.runWithSessionRetry(() {
+          return widget.sessionService.apiService.getMe();
+        });
+
         return true;
       }
+
+      throw Exception('Auth token missing after session refresh');
     } catch (error) {
       debugPrint('CALL_AUTH_REFRESH_FAILED:$error');
     }

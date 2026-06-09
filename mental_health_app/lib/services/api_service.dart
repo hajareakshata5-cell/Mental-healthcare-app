@@ -564,14 +564,10 @@ class ApiService {
   Future<Map<String, dynamic>> saveFcmToken({
     required String fcmToken,
   }) async {
-    try {
-      return await _postJson(
-        _apiUri('/notifications/save-token'),
-        body: {'fcmToken': fcmToken},
-      );
-    } catch (_) {
-      return {'success': true, 'message': 'FCM token skipped locally'};
-    }
+    return _postJson(
+      _apiUri('/notifications/save-token'),
+      body: {'fcmToken': fcmToken},
+    );
   }
 
   Future<Map<String, dynamic>> getStreak() async {
