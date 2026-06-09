@@ -868,6 +868,7 @@ class _MindCareShellState extends State<MindCareShell>
                     sessionService: widget.sessionService,
                     socketService: _socketService,
                     clinicalEngine: _clinicalEngine,
+                    soundTherapyService: _soundTherapyService,
                   ),
                 ],
               ),
@@ -3935,12 +3936,13 @@ class SupportTab extends StatefulWidget {
     required this.sessionService,
     required this.socketService,
     required this.clinicalEngine,
+    required this.soundTherapyService,
   });
 
   final SessionService sessionService;
   final SocketService socketService;
   final ClinicalEngineService clinicalEngine;
-
+  final SoundTherapyService soundTherapyService;
   @override
   State<SupportTab> createState() => _SupportTabState();
 }
@@ -4103,6 +4105,7 @@ class _SupportTabState extends State<SupportTab> {
     try {
       final data = await _api.completeStreak(
         waterCompleted: _waterCompletedToday,
+        soundCompleted: _soundCompletedToday(),
       );
 
       if (!mounted) return;
@@ -4112,7 +4115,7 @@ class _SupportTabState extends State<SupportTab> {
         _streakMessage = data['completed'] == true
             ? 'Day ${_streakData?['currentStreak'] ?? 1} streak completed!'
             : data['reason']?.toString() ??
-                'Complete 20 min call + water task to unlock streak.';
+                'Complete water + sound therapy + 20 min call to unlock streak.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -4126,6 +4129,68 @@ class _SupportTabState extends State<SupportTab> {
         });
       }
     }
+  }
+
+  bool _soundCompletedToday() {
+    final today = DateTime.now();
+    return widget.soundTherapyService.history.any((entry) {
+      final completedAt = entry.completedAt.toLocal();
+      return entry.completed &&
+          completedAt.year == today.year &&
+          completedAt.month == today.month &&
+          completedAt.day == today.day;
+    });
+  }
+
+  int _monthlyPracticeRankCount() {
+    final now = DateTime.now();
+    final dates = (_streakData?['completedDates'] as List?)
+            ?.map((value) => value.toString())
+            .toSet() ??
+        <String>{};
+
+    return dates.where((dateKey) {
+      final parsed = DateTime.tryParse(dateKey);
+      return parsed != null &&
+          parsed.year == now.year &&
+          parsed.month == now.month;
+    }).length;
+  }
+
+  String _monthlyRankLabel() {
+    final days = _monthlyPracticeRankCount();
+    if (days >= 21) return 'Gold';
+    if (days >= 15) return 'Silver';
+    return 'Bronze';
+  }
+
+  void _openStreakPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _StreakDetailPage(
+          streakData: _streakData,
+          waterCompletedToday: _waterCompletedToday,
+          soundCompletedToday: _soundCompletedToday(),
+          totalMinutes: _totalMinutes,
+          rankLabel: _monthlyRankLabel(),
+          onRefresh: () async {
+            await _loadStreak();
+            if (mounted) setState(() {});
+          },
+          onComplete: _completeStreak,
+        ),
+      ),
+    );
+  }
+
+  void _openProfilePage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _SupportProfilePage(
+          sessionService: widget.sessionService,
+        ),
+      ),
+    );
   }
 
   int _asInt(dynamic value) {
@@ -5031,7 +5096,13 @@ class _SupportTabState extends State<SupportTab> {
         bottom: false,
         child: Column(
           children: [
-            _SupportProfileHeader(displayName: _displayName),
+            _SupportProfileHeader(
+              displayName: _displayName,
+              streakCount: _asInt(_streakData?['currentStreak']),
+              rankCount: _monthlyPracticeRankCount(),
+              onProfileTap: _openProfilePage,
+              onStreakTap: _openStreakPage,
+            ),
             _SupportMainTabs(
               selected: _tab,
               onChanged: (value) {
@@ -5627,9 +5698,19 @@ class _SupportWeekBar {
 }
 
 class _SupportProfileHeader extends StatelessWidget {
-  const _SupportProfileHeader({required this.displayName});
+  const _SupportProfileHeader({
+    required this.displayName,
+    required this.streakCount,
+    required this.rankCount,
+    required this.onProfileTap,
+    required this.onStreakTap,
+  });
 
   final String displayName;
+  final int streakCount;
+  final int rankCount;
+  final VoidCallback onProfileTap;
+  final VoidCallback onStreakTap;
 
   @override
   Widget build(BuildContext context) {
@@ -5638,43 +5719,590 @@ class _SupportProfileHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(30, 12, 30, 16),
       child: Row(
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              _SupportAvatar(name: displayName, color: const Color(0xFF0F766E)),
-              Positioned(
-                right: -3,
-                bottom: -2,
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFACC15),
-                    shape: BoxShape.circle,
-                    border:
-                        Border.all(color: const Color(0xFF1C1F2E), width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.workspace_premium,
-                    color: Color(0xFF78350F),
-                    size: 14,
+          GestureDetector(
+            onTap: onProfileTap,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                _SupportAvatar(
+                  name: displayName,
+                  color: const Color(0xFF0F766E),
+                ),
+                Positioned(
+                  right: -3,
+                  bottom: -2,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFACC15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF1C1F2E),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium,
+                      color: Color(0xFF78350F),
+                      size: 14,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const Spacer(),
           _SupportTopPill(
             icon: Icons.leaderboard_outlined,
-            label: '1',
+            label: '$rankCount',
             color: const Color(0xFF6366F1),
           ),
           const SizedBox(width: 12),
-          _SupportTopPill(
-            icon: Icons.local_fire_department,
-            label: '2',
-            color: const Color(0xFFF97316),
+          GestureDetector(
+            onTap: onStreakTap,
+            child: _SupportTopPill(
+              icon: Icons.local_fire_department,
+              label: '$streakCount',
+              color: const Color(0xFFF97316),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakDetailPage extends StatelessWidget {
+  const _StreakDetailPage({
+    required this.streakData,
+    required this.waterCompletedToday,
+    required this.soundCompletedToday,
+    required this.totalMinutes,
+    required this.rankLabel,
+    required this.onRefresh,
+    required this.onComplete,
+  });
+
+  final Map<String, dynamic>? streakData;
+  final bool waterCompletedToday;
+  final bool soundCompletedToday;
+  final int totalMinutes;
+  final String rankLabel;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function() onComplete;
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.round();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  List<String> _completedDates() {
+    return (streakData?['completedDates'] as List?)
+            ?.map((value) => value.toString())
+            .toList(growable: false) ??
+        const <String>[];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _asInt(streakData?['currentStreak']);
+    final longest = _asInt(streakData?['longestStreak']);
+    final total = _asInt(streakData?['totalCompletedDays']);
+    final completedDates = _completedDates().toSet();
+    final now = DateTime.now();
+    final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0C),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: const Text('Streak'),
+        actions: [
+          IconButton(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.sync),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFF374151)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '🔥 Practice Streak',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Current streak: $current days',
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Longest streak: $longest days',
+                  style:
+                      const TextStyle(color: Color(0xFFCBD5E1), fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Total completed days: $total',
+                  style:
+                      const TextStyle(color: Color(0xFFCBD5E1), fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Rank: $rankLabel',
+                  style: const TextStyle(
+                    color: Color(0xFFFBBF24),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFF374151)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Today required tasks',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _StreakRequirementRow(
+                  done: waterCompletedToday,
+                  text: 'Water task complete',
+                ),
+                _StreakRequirementRow(
+                  done: soundCompletedToday,
+                  text: 'Sound therapy task complete',
+                ),
+                _StreakRequirementRow(
+                  done: totalMinutes >= 20,
+                  text: '20 minute call complete',
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: onComplete,
+                    child: const Text('Check & Complete Today'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFF374151)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${now.month}/${now.year} calendar',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var day = 1; day <= daysInMonth; day++)
+                      _StreakDayChip(
+                        day: day,
+                        completed: completedDates.contains(
+                          '${now.year}-${now.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakRequirementRow extends StatelessWidget {
+  const _StreakRequirementRow({
+    required this.done,
+    required this.text,
+  });
+
+  final bool done;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: done ? const Color(0xFF22C55E) : const Color(0xFF94A3B8),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakDayChip extends StatelessWidget {
+  const _StreakDayChip({
+    required this.day,
+    required this.completed,
+  });
+
+  final int day;
+  final bool completed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: completed ? const Color(0xFF22C55E) : const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: completed ? const Color(0xFF86EFAC) : const Color(0xFF374151),
+        ),
+      ),
+      child: Text(
+        '$day',
+        style: TextStyle(
+          color: completed ? Colors.black : Colors.white,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportProfilePage extends StatelessWidget {
+  const _SupportProfilePage({
+    required this.sessionService,
+  });
+
+  final SessionService sessionService;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = sessionService.user;
+    final name =
+        user?.displayName ?? user?.username ?? user?.alias ?? 'MindCare user';
+    final emailOrAlias = user?.email ?? user?.alias ?? 'Not available';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0C),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: const Text('Profile'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF374151)),
+            ),
+            child: Column(
+              children: [
+                _SupportAvatar(name: name, color: const Color(0xFF0F766E)),
+                const SizedBox(height: 16),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  emailOrAlias,
+                  style:
+                      const TextStyle(color: Color(0xFFCBD5E1), fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          _ProfileInfoTile(
+              title: 'Member since', value: 'Available after profile sync'),
+          _ProfileInfoTile(
+            title: 'Subscription status',
+            value: user?.isSubscribed == true ? 'Premium' : 'Free',
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            tileColor: const Color(0xFF111827),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            leading: const Icon(Icons.settings, color: Colors.white),
+            title:
+                const Text('Settings', style: TextStyle(color: Colors.white)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => _SupportSettingsPage(
+                    sessionService: sessionService,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileInfoTile extends StatelessWidget {
+  const _ProfileInfoTile({
+    required this.title,
+    required this.value,
+  });
+
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF374151)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child:
+                Text(title, style: const TextStyle(color: Color(0xFFCBD5E1))),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SupportSettingsPage extends StatefulWidget {
+  const _SupportSettingsPage({
+    required this.sessionService,
+  });
+
+  final SessionService sessionService;
+
+  @override
+  State<_SupportSettingsPage> createState() => _SupportSettingsPageState();
+}
+
+class _SupportSettingsPageState extends State<_SupportSettingsPage> {
+  bool _darkMode = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0C),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: const Text('Settings'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          ListTile(
+            tileColor: const Color(0xFF111827),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            leading: const Icon(Icons.notifications_active_outlined,
+                color: Colors.white),
+            title: const Text('Practice reminder',
+                style: TextStyle(color: Colors.white)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const _PracticeReminderPage(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            value: _darkMode,
+            onChanged: (value) => setState(() => _darkMode = value),
+            tileColor: const Color(0xFF111827),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title:
+                const Text('Dark mode', style: TextStyle(color: Colors.white)),
+            secondary:
+                const Icon(Icons.dark_mode_outlined, color: Colors.white),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            tileColor: const Color(0xFF111827),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            leading: const Icon(Icons.logout, color: Color(0xFFF87171)),
+            title: const Text('Logout',
+                style: TextStyle(color: Color(0xFFF87171))),
+            onTap: () async {
+              await widget.sessionService.logout();
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PracticeReminderPage extends StatefulWidget {
+  const _PracticeReminderPage();
+
+  @override
+  State<_PracticeReminderPage> createState() => _PracticeReminderPageState();
+}
+
+class _PracticeReminderPageState extends State<_PracticeReminderPage> {
+  TimeOfDay? _selectedTime;
+  bool _saved = false;
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? const TimeOfDay(hour: 19, minute: 0),
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      _selectedTime = picked;
+      _saved = false;
+    });
+  }
+
+  Future<void> _saveReminder() async {
+    if (_selectedTime == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('practice_reminder_hour', _selectedTime!.hour);
+    await prefs.setInt('practice_reminder_minute', _selectedTime!.minute);
+
+    if (!mounted) return;
+    setState(() => _saved = true);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Practice reminder saved for ${_selectedTime!.format(context)}'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel =
+        _selectedTime == null ? 'Select Time' : _selectedTime!.format(context);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0C),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111827),
+        title: const Text('Practice reminder'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const Text(
+            'Don’t miss to practice English',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: _pickTime,
+            icon: const Icon(Icons.schedule),
+            label: Text(selectedLabel),
+          ),
+          const SizedBox(height: 18),
+          FilledButton(
+            onPressed: _selectedTime == null ? null : _saveReminder,
+            child: const Text('Save Reminder'),
+          ),
+          if (_saved) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Reminder set at ${_selectedTime!.format(context)}',
+              style: const TextStyle(color: Color(0xFF22C55E)),
+            ),
+          ],
         ],
       ),
     );

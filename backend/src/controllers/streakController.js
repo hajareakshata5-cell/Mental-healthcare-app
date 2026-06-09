@@ -12,6 +12,54 @@ function getYesterdayKey() {
   return date.toISOString().slice(0, 10);
 }
 
+function getDayRange(dateKey) {
+  const start = new Date(`${dateKey}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function normalizeStreakBreak(streak) {
+  const today = getTodayKey();
+  const yesterday = getYesterdayKey();
+
+  if (
+    streak.lastCompletedDate &&
+    streak.lastCompletedDate !== today &&
+    streak.lastCompletedDate !== yesterday
+  ) {
+    streak.currentStreak = 0;
+  }
+
+  if (!Array.isArray(streak.completedDates)) {
+    streak.completedDates = [];
+  }
+
+  return streak;
+}
+
+async function getTodayCallSeconds(userId, today) {
+  const { start, end } = getDayRange(today);
+
+  const callAgg = await CallLog.aggregate([
+    {
+      $match: {
+        status: "ended",
+        createdAt: { $gte: start, $lt: end },
+        $or: [{ userId }, { targetUserId: userId }],
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalSeconds: { $sum: "$durationSeconds" },
+      },
+    },
+  ]);
+
+  return callAgg[0]?.totalSeconds || 0;
+}
+
 const getStreak = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
@@ -20,6 +68,9 @@ const getStreak = asyncHandler(async (req, res) => {
   if (!streak) {
     streak = await Streak.create({ userId });
   }
+
+  normalizeStreakBreak(streak);
+  await streak.save();
 
   return res.status(200).json({
     success: true,
@@ -38,53 +89,41 @@ const completeDailyStreak = asyncHandler(async (req, res) => {
     streak = await Streak.create({ userId });
   }
 
+  normalizeStreakBreak(streak);
+
   if (streak.lastCompletedDate === today) {
     return res.status(200).json({
       success: true,
+      completed: true,
       streak,
       message: "Streak already completed today",
     });
   }
 
-  const todayStart = new Date(`${today}T00:00:00.000Z`);
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-
-  const callAgg = await CallLog.aggregate([
-    {
-      $match: {
-        userId,
-        status: "ended",
-        createdAt: { $gte: todayStart, $lt: tomorrowStart },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalSeconds: { $sum: "$durationSeconds" },
-      },
-    },
-  ]);
-
-  const totalSeconds = callAgg[0]?.totalSeconds || 0;
+  const totalSeconds = await getTodayCallSeconds(userId, today);
+  const callMinutes = Math.floor(totalSeconds / 60);
   const hasTwentyMinCall = totalSeconds >= 20 * 60;
 
   const waterCompleted =
-    req.body.waterCompleted === true ||
-    req.body.waterCompleted === "true";
+    req.body.waterCompleted === true || req.body.waterCompleted === "true";
 
- if (!hasTwentyMinCall || !waterCompleted) {
-  return res.status(200).json({
-    success: true,
-    completed: false,
-    reason: "Need 20 minutes call and completed water intake task",
-    requirements: {
-      callMinutes: Math.floor(totalSeconds / 60),
-      waterCompleted,
-    },
-    streak,
-  });
-}
+  const soundCompleted =
+    req.body.soundCompleted === true || req.body.soundCompleted === "true";
+
+  if (!hasTwentyMinCall || !waterCompleted || !soundCompleted) {
+    return res.status(200).json({
+      success: true,
+      completed: false,
+      reason: "Need water task, sound therapy task, and 20 minutes call",
+      requirements: {
+        callMinutes,
+        waterCompleted,
+        soundCompleted,
+        hasTwentyMinCall,
+      },
+      streak,
+    });
+  }
 
   if (streak.lastCompletedDate === yesterday) {
     streak.currentStreak += 1;
@@ -94,13 +133,24 @@ const completeDailyStreak = asyncHandler(async (req, res) => {
 
   streak.longestStreak = Math.max(streak.longestStreak, streak.currentStreak);
   streak.lastCompletedDate = today;
-  streak.totalCompletedDays += 1;
+
+  if (!streak.completedDates.includes(today)) {
+    streak.completedDates.push(today);
+    streak.totalCompletedDays = streak.completedDates.length;
+  }
 
   await streak.save();
 
   return res.status(200).json({
     success: true,
     completed: true,
+    message: `Day ${streak.currentStreak} streak completed`,
+    requirements: {
+      callMinutes,
+      waterCompleted,
+      soundCompleted,
+      hasTwentyMinCall,
+    },
     streak,
   });
 });

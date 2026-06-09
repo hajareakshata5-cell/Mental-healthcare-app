@@ -588,20 +588,29 @@ class ApiService {
 
   Future<Map<String, dynamic>> completeStreak({
     required bool waterCompleted,
+    required bool soundCompleted,
   }) async {
     try {
       return await _postJson(
         _apiUri('/streaks/complete'),
-        body: {'waterCompleted': waterCompleted},
+        body: {
+          'waterCompleted': waterCompleted,
+          'soundCompleted': soundCompleted,
+        },
       );
     } catch (_) {
       return {
         'success': true,
+        'completed': waterCompleted && soundCompleted,
         'streak': {
-          'currentStreak': waterCompleted ? 1 : 0,
-          'longestStreak': waterCompleted ? 1 : 0,
-          'totalCompletedDays': waterCompleted ? 1 : 0,
+          'currentStreak': waterCompleted && soundCompleted ? 1 : 0,
+          'longestStreak': waterCompleted && soundCompleted ? 1 : 0,
+          'totalCompletedDays': waterCompleted && soundCompleted ? 1 : 0,
+          'completedDates': waterCompleted && soundCompleted
+              ? [DateTime.now().toIso8601String().substring(0, 10)]
+              : [],
           'waterCompleted': waterCompleted,
+          'soundCompleted': soundCompleted,
         },
         'message': 'Streak completed locally',
       };

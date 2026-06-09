@@ -25,6 +25,10 @@ const streakSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    completedDates: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true },
 );
