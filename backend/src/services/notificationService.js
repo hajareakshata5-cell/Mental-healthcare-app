@@ -1,4 +1,4 @@
-const { messaging } = require("../config/firebase");
+﻿const { messaging } = require("../config/firebase");
 
 const sendPushNotification = async ({ token, title, body, data = {} }) => {
   if (!token) {
@@ -14,19 +14,28 @@ const sendPushNotification = async ({ token, title, body, data = {} }) => {
     };
   }
 
+  const safeData = Object.fromEntries(
+    Object.entries(data || {}).map(([key, value]) => [
+      key,
+      value == null ? "" : String(value),
+    ]),
+  );
+
   const message = {
     token,
     notification: {
       title,
       body,
     },
-    data: Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [key, String(value)]),
-    ),
+    data: safeData,
     android: {
       priority: "high",
+      ttl: 120000,
       notification: {
+        channelId: "incoming_calls",
+        priority: "max",
         sound: "default",
+        clickAction: "FLUTTER_NOTIFICATION_CLICK",
       },
     },
   };
@@ -35,7 +44,7 @@ const sendPushNotification = async ({ token, title, body, data = {} }) => {
 
   console.log("[push] sent", {
     tokenPresent: true,
-    type: data.type,
+    type: safeData.type,
     response,
   });
 
