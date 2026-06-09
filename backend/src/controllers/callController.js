@@ -625,30 +625,51 @@ if (receiverBusy) {
     incomingCalls: receiver.notificationSettings?.incomingCalls !== false,
   });
 
+  console.log("[friend-call-debug] receiver push state", {
+  receiverId: receiver._id.toString(),
+  receiverName: displayUserName(receiver),
+  hasFcmToken: Boolean(receiver.fcmToken),
+  fcmTokenStart: receiver.fcmToken ? receiver.fcmToken.slice(0, 18) : null,
+  pushEnabled: receiver.notificationSettings?.pushEnabled !== false,
+  incomingCalls: receiver.notificationSettings?.incomingCalls !== false,
+  callId: callLog._id.toString(),
+  channelName,
+});
+
   if (
     receiver.fcmToken &&
     receiver.notificationSettings?.pushEnabled !== false &&
     receiver.notificationSettings?.incomingCalls !== false
   ) {
     try {
-      await sendPushNotification({
-        token: receiver.fcmToken,
-        title: "Incoming MindCare Call",
-        body: `${displayUserName(caller)} is calling you`,
-        data: {
-          type: "incoming_call",
-          callId: callLog._id.toString(),
-          callerId: caller._id.toString(),
-          callerName: displayUserName(caller),
-          channelName,
-          agoraToken: receiverAgoraToken,
-          agoraUid: String(receiverAgoraUid),
-          callType: type,
-        },
-      });
-    } catch (error) {
-      console.error("[push] friend incoming call failed", error.message);
-    }
+  const pushResult = await sendPushNotification({
+    token: receiver.fcmToken,
+    title: "Incoming MindCare Call",
+    body: `${displayUserName(caller)} is calling you`,
+    data: {
+      type: "incoming_call",
+      callId: callLog._id.toString(),
+      callerId: caller._id.toString(),
+      callerName: displayUserName(caller),
+      channelName,
+      agoraToken: receiverAgoraToken,
+      agoraUid: String(receiverAgoraUid),
+      callType: type,
+    },
+  });
+
+  console.log("[friend-call-debug] FCM send success", {
+    receiverId: receiver._id.toString(),
+    callId: callLog._id.toString(),
+    result: pushResult,
+  });
+} catch (error) {
+  console.error("[friend-call-debug] FCM send failed", {
+    message: error.message,
+    code: error.code,
+    stack: error.stack,
+  });
+}
   }
 
   return res.status(200).json({
