@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -31,6 +31,13 @@ function createApp() {
       "GET /api/v1/mood",
       "POST /api/v1/mood",
       "POST /api/v1/chat/respond",
+      "POST /api/v1/calls/friend/request",
+      "GET /api/v1/calls/friend/incoming",
+      "POST /api/v1/calls/friend/accept",
+      "POST /api/v1/calls/friend/reject",
+      "POST /api/v1/calls/friend/cancel",
+      "GET /api/v1/calls/friend/status/:callId",
+      "POST /api/v1/notifications/save-token",
       "socket.io /",
     ],
   };
@@ -113,3 +120,5 @@ function createApp() {
 }
 
 module.exports = { createApp };
+
+
