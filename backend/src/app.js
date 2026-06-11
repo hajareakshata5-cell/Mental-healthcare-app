@@ -38,6 +38,13 @@ function createApp() {
       "POST /api/v1/calls/friend/cancel",
       "GET /api/v1/calls/friend/status/:callId",
       "POST /api/v1/notifications/save-token",
+      "GET /api/v1/payment/invoice/:paymentId",
+      "GET /api/v1/payment/history",
+      "POST /api/v1/payment/verify",
+      "POST /api/v1/payment/create-order",
+      "POST /api/v1/subscription/restore",
+      "POST /api/v1/subscription/activate",
+      "GET /api/v1/subscription",
       "socket.io /",
     ],
   };
