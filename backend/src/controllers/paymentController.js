@@ -189,7 +189,9 @@ const createOrder = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid premium plan");
     }
     const amountPaise = planAmountInPaise(plan);
-    const receipt = `premium_${String(userId)}_${plan}_${Date.now()}`;
+    const shortUserId = String(userId).slice(-8);
+    const shortTime = String(Date.now()).slice(-8);
+    const receipt = `mc_${shortUserId}_${plan}_${shortTime}`;
     const idempotencyKey = req.headers["x-idempotency-key"];
 
     const requestedMethod = (req.body && req.body.method) || "upi";
