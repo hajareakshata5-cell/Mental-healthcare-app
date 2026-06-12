@@ -55,15 +55,48 @@ class _MindcareReviewScreenState extends State<MindcareReviewScreen> {
     }
   }
 
+  void _openRewardScreen() {
+    final completedMinutes = widget.callDurationSeconds ~/ 60;
+    final earnedStars = completedMinutes * 2;
+    final earnedCoins = completedMinutes ~/ 2;
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StarsEarnedScreen(
+          apiService: widget.apiService,
+          earnedStars: earnedStars,
+          earnedCoins: earnedCoins,
+          durationSeconds: widget.callDurationSeconds,
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitReview({bool skipped = false}) async {
-    if (!skipped && selectedStars == 0) {
+    if (skipped) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = true;
+        _error = null;
+      });
+
+      _openRewardScreen();
+      return;
+    }
+
+    if (selectedStars == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text("Please select a rating before submitting.")),
+          content: Text("Please select a rating before submitting."),
+        ),
       );
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _submitting = true;
       _error = null;
@@ -73,38 +106,41 @@ class _MindcareReviewScreenState extends State<MindcareReviewScreen> {
       await widget.apiService.endCall(
         callId: widget.callId,
         durationSeconds: widget.callDurationSeconds,
-        rating: skipped ? 0 : selectedStars,
-        feedback: skipped ? "Skipped review" : feedbackController.text.trim(),
+        rating: selectedStars,
+        feedback: feedbackController.text.trim(),
       );
 
-      final completedMinutes = widget.callDurationSeconds ~/ 60;
-      final earnedStars = completedMinutes * 2;
-      final earnedCoins = completedMinutes ~/ 2;
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StarsEarnedScreen(
-            apiService: widget.apiService,
-            earnedStars: earnedStars,
-            earnedCoins: earnedCoins,
-            durationSeconds: widget.callDurationSeconds,
-          ),
-        ),
-      );
+      _openRewardScreen();
+      return;
     } catch (e) {
+      debugPrint('REVIEW_SUBMIT_FAILED: $e');
+
       if (!mounted) return;
-      setState(() => _error = e.toString());
+
+      final message = e.toString().toLowerCase();
+      final isRateLimit = message.contains('429') ||
+          message.contains('rate limit') ||
+          message.contains('too many') ||
+          message.contains('call service is busy');
+
+      if (isRateLimit) {
+        _openRewardScreen();
+        return;
+      }
+
+      setState(() {
+        _error = 'Could not submit feedback right now. Please try again.';
+      });
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final canSkip = widget.callDurationSeconds < 60;
+    final canSkip = widget.callDurationSeconds < 180;
 
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
@@ -168,6 +204,11 @@ class _MindcareReviewScreenState extends State<MindcareReviewScreen> {
               const SizedBox(height: 14),
               TextField(
                 controller: feedbackController,
+                onChanged: (_) {
+                  if (_error != null) {
+                    setState(() => _error = null);
+                  }
+                },
                 maxLines: 5,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
