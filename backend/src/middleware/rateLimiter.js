@@ -185,8 +185,9 @@ const apiLimiter = rateLimit({
 
 const callApiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 240,
+  max: 3000,
   standardHeaders: true,
+  skipSuccessfulRequests: true,
   legacyHeaders: false,
   keyGenerator: apiKeyGenerator,
   store: createRateLimitStore("mindcare_call_rl:"),
