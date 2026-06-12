@@ -280,4 +280,13 @@ userSchema.methods.consumeFreeCall = function consumeFreeCall() {
   return this;
 };
 
+
+// SCALING_INDEXES_USER
+userSchema.index({ createdAt: -1 });
+userSchema.index({ lastAuthAt: -1 });
+userSchema.index({ authProvider: 1, createdAt: -1 });
+userSchema.index({ isSubscribed: 1, createdAt: -1 });
+userSchema.index({ emailVerified: 1, emailVerificationOtpExpiresAt: 1 });
+userSchema.index({ fcmToken: 1 }, { sparse: true });
+
 module.exports = mongoose.model("User", userSchema);

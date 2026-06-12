@@ -33,4 +33,10 @@ friendRequestSchema.index(
   { unique: true },
 );
 
+
+// SCALING_INDEXES_FRIENDREQUEST
+friendRequestSchema.index({ receiverId: 1, status: 1, createdAt: -1 });
+friendRequestSchema.index({ senderId: 1, status: 1, createdAt: -1 });
+friendRequestSchema.index({ status: 1, createdAt: -1 });
+
 module.exports = mongoose.model("FriendRequest", friendRequestSchema);

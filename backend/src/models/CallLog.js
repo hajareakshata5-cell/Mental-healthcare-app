@@ -108,4 +108,12 @@ const callLogSchema = new mongoose.Schema(
   },
 );
 
+
+// SCALING_INDEXES_CALLLOG
+callLogSchema.index({ userId: 1, createdAt: -1 });
+callLogSchema.index({ userId: 1, status: 1, createdAt: -1 });
+callLogSchema.index({ targetUserId: 1, status: 1, createdAt: -1 });
+callLogSchema.index({ status: 1, updatedAt: -1 });
+callLogSchema.index({ channelName: 1, status: 1 });
+
 module.exports = mongoose.model("CallLog", callLogSchema);
