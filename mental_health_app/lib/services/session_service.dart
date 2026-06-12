@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -93,8 +95,13 @@ class SessionService extends ChangeNotifier {
               'Session restored from local token, profile sync unavailable.';
         }
       } else if (guestJson != null && guestJson.isNotEmpty) {
-        _restoreLocalGuestSession(guestJson);
-        unawaited(_syncLocalGuestSessionIfPossible());
+        await _storage.delete(key: _guestUserKey);
+        await _storage.delete(key: _userKey);
+        _apiService.clearAuthToken();
+        _authenticated = false;
+        _user = null;
+        _loginResult = null;
+        _refreshToken = null;
       }
     } catch (error) {
       _error = error.toString();
@@ -184,7 +191,7 @@ class SessionService extends ChangeNotifier {
     }
   }
 
-    Future<Map<String, dynamic>> forgotPasswordSendOtp({
+  Future<Map<String, dynamic>> forgotPasswordSendOtp({
     required String email,
   }) async {
     _busy = true;
@@ -216,16 +223,18 @@ class SessionService extends ChangeNotifier {
 
   Future<void> continueAsGuest({String? alias}) async {
     final normalizedAlias = _normalizeGuestAlias(alias);
-    try {
-      await _performAuth(() => _apiService.loginGuest(normalizedAlias));
-      await _storage.write(
-        key: _guestUserKey,
-        value: jsonEncode(_user?.toJson() ?? const {}),
-      );
-      return;
-    } catch (error) {
-      debugPrint('GUEST_BACKEND_FALLBACK:${error.toString()}');
-      await _activateOfflineGuestSession(normalizedAlias);
+
+    await _performAuth(() => _apiService.loginGuest(normalizedAlias));
+
+    await _storage.write(
+      key: _guestUserKey,
+      value: jsonEncode(_user?.toJson() ?? const {}),
+    );
+
+    final token = _apiService.authToken;
+    if (token == null || token.isEmpty) {
+      await clearSession();
+      throw Exception('Guest session token missing. Please sign in again.');
     }
   }
 

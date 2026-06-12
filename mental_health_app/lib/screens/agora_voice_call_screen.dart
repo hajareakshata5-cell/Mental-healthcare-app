@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
@@ -51,6 +53,10 @@ class _AgoraVoiceCallScreenState extends State<AgoraVoiceCallScreen> {
       _voiceService.registerHandlers(
         onUserJoined: (_) {
           if (!mounted) return;
+          unawaited(_voiceService.restoreAudioPath(
+            localMuted: _muted,
+            speakerEnabled: _speakerOn,
+          ));
           setState(() => _remoteJoined = true);
         },
         onUserLeft: (_) {
@@ -69,15 +75,56 @@ class _AgoraVoiceCallScreenState extends State<AgoraVoiceCallScreen> {
         },
       );
 
+      debugPrint(
+        'AGORA_SCREEN_JOIN '
+        'channel=${widget.channelName} '
+        'tokenEmpty=${widget.token.isEmpty} '
+        'tokenLength=${widget.token.length} '
+        'uid=${widget.uid}',
+      );
+
+      if (widget.channelName.trim().isEmpty) {
+        throw Exception('Agora channel missing');
+      }
+
+      if (widget.token.trim().isEmpty) {
+        throw Exception(
+          'Agora token missing. Render backend is not sending token.',
+        );
+      }
+
+      if (widget.token.trim().length < 50) {
+        throw Exception(
+          'Agora token invalid length: ${widget.token.length}',
+        );
+      }
+
+      if (widget.uid <= 0) {
+        throw Exception(
+          'Agora uid invalid: ${widget.uid}',
+        );
+      }
+
       await _voiceService.joinChannel(
         channelName: widget.channelName,
         token: widget.token,
         uid: widget.uid,
       );
+      await _voiceService.restoreAudioPath(
+        localMuted: _muted,
+        speakerEnabled: _speakerOn,
+      );
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted || _ending) return;
         setState(() => _seconds++);
+
+        if (_seconds > 0 && _seconds % 8 == 0) {
+          unawaited(_voiceService.restoreAudioPath(
+            localMuted: _muted,
+            speakerEnabled: _speakerOn,
+          ));
+        }
       });
 
       if (!mounted) return;
@@ -169,6 +216,18 @@ class _AgoraVoiceCallScreenState extends State<AgoraVoiceCallScreen> {
     final callId = widget.callId;
 
     if (apiService != null && callId != null && callId.isNotEmpty) {
+      try {
+        await apiService.endCall(
+          callId: callId,
+          durationSeconds: _seconds,
+          rating: 0,
+          feedback: 'Call ended by user',
+        );
+        debugPrint('VOICE_CALL_END_POSTED callId=$callId duration=$_seconds');
+      } catch (endApiError) {
+        debugPrint('VOICE_CALL_END_POST_FAILED: $endApiError');
+      }
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => MindcareReviewScreen(

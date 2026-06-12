@@ -1,3 +1,5 @@
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -162,7 +164,7 @@ class _MindcareReviewScreenState extends State<MindcareReviewScreen> {
               Text(
                 "Duration: $durationText",
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 17,
                 ),
               ),
@@ -213,9 +215,10 @@ class _MindcareReviewScreenState extends State<MindcareReviewScreen> {
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: "Write your feedback here...",
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                  hintStyle:
+                      TextStyle(color: Colors.white.withValues(alpha: 0.4)),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
+                  fillColor: Colors.white.withValues(alpha: 0.06),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,

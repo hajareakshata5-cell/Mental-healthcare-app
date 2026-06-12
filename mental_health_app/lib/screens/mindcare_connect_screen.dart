@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
-import 'mindcare_ongoing_call_screen.dart';
 
 class MindcareConnectScreen extends StatefulWidget {
   const MindcareConnectScreen({
@@ -124,8 +123,11 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
           timer.cancel();
 
           setState(() {
-            _error =
-                "No co-learner is available right now. Please try again soon.";
+            _error = "Sorry, any co-learner is not available right now.";
+          });
+
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) Navigator.pop(context);
           });
 
           return;
@@ -227,7 +229,7 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
                       ? "Starting backend call session"
                       : "Please wait while we connect you",
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 16,
                   ),
                   textAlign: TextAlign.center,
@@ -236,7 +238,7 @@ class _MindcareConnectScreenState extends State<MindcareConnectScreen> {
                 Text(
                   _currentWaitingQuote,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 16,
                     height: 1.4,
                     fontWeight: FontWeight.w600,
