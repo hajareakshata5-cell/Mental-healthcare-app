@@ -1,5 +1,6 @@
 const express = require("express");
 const { authRequired } = require("../middleware/auth");
+const { callApiLimiter } = require("../middleware/rateLimiter");
 const {
   randomMatch,
   startCall,
