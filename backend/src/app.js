@@ -11,6 +11,11 @@ const { apiLimiter } = require("./middleware/rateLimiter");
 const { idempotencyMiddleware } = require("./middleware/idempotency");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
+
+function shouldSkipGlobalApiLimiter(req) {
+  return req.path.startsWith("/api/v1/calls");
+}
+
 function createApp() {
   const app = express();
   const jsonParser = express.json({ limit: "1mb" });
@@ -93,7 +98,13 @@ function createApp() {
   });
   morgan.token("requestId", (req) => req.requestId);
   app.use(morgan(env.env === "production" ? "combined" : "dev"));
-  app.use(apiLimiter);
+  app.use((req, res, next) => {
+    if (shouldSkipGlobalApiLimiter(req)) {
+      return next();
+    }
+
+    return apiLimiter(req, res, next);
+  });
   app.use(idempotencyMiddleware);
 
   app.get("/", (_req, res) => {

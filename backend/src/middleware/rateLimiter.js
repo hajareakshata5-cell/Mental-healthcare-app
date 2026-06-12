@@ -182,6 +182,20 @@ const apiLimiter = rateLimit({
   },
 });
 
+
+const callApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: apiKeyGenerator,
+  store: createRateLimitStore("mindcare_call_rl:"),
+  message: {
+    success: false,
+    message: "Call service is busy. Please wait a few seconds and try again.",
+  },
+});
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -196,4 +210,4 @@ const authLimiter = rateLimit({
   },
 });
 
-module.exports = { apiLimiter, authLimiter };
+module.exports = { apiLimiter, authLimiter, callApiLimiter };

@@ -16,6 +16,8 @@ const {
 
 const router = express.Router();
 
+router.use(callApiLimiter);
+
 router.post("/random-match", authRequired, randomMatch);
 router.post("/start", authRequired, startCall);
 
