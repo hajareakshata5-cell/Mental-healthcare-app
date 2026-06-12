@@ -1,9 +1,10 @@
-const http = require("http");
+﻿const http = require("http");
 const env = require("./src/config/env");
 const { connectDb } = require("./src/config/db");
 const { createApp } = require("./src/app");
 const { registerSocketHandlers } = require("./src/sockets");
 const packageJson = require("./package.json");
+const { startCallCleanupJob } = require("./src/jobs/callCleanupJob");
 
 function logStartupDiagnostics() {
   const requiredEnv = ["MONGODB_URI", "JWT_SECRET"];
@@ -56,6 +57,7 @@ async function bootstrap() {
     const server = http.createServer(app);
 
     registerSocketHandlers(server, env.socketCorsOrigins);
+    startCallCleanupJob();
 
     // eslint-disable-next-line no-console
     console.log(
@@ -74,3 +76,4 @@ async function bootstrap() {
 }
 
 bootstrap();
+
