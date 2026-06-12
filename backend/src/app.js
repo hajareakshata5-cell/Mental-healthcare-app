@@ -3,11 +3,12 @@ const helmet = require("helmet");
 const cors = require("cors");
 const morgan = require("morgan");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 
 const env = require("./config/env");
 const routes = require("./routes");
 const packageJson = require("../package.json");
-const { apiLimiter } = require("./middleware/rateLimiter");
+const { apiLimiter, getRedisClient } = require("./middleware/rateLimiter");
 const { idempotencyMiddleware } = require("./middleware/idempotency");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
@@ -116,8 +117,69 @@ function createApp() {
     });
   });
 
-  app.get("/health", (_req, res) => {
-    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+  app.get("/health", async (_req, res) => {
+    const startedAt = Date.now();
+
+    const mongoStateMap = {
+      0: "disconnected",
+      1: "connected",
+      2: "connecting",
+      3: "disconnecting",
+    };
+
+    const mongo = {
+      status: mongoStateMap[mongoose.connection.readyState] || "unknown",
+      ok: mongoose.connection.readyState === 1,
+    };
+
+    if (mongo.ok && mongoose.connection.db) {
+      try {
+        await mongoose.connection.db.admin().ping();
+      } catch (error) {
+        mongo.ok = false;
+        mongo.error = error.message;
+      }
+    }
+
+    const redis = {
+      configured: Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL),
+      ok: false,
+      status: "not_configured",
+    };
+
+    if (redis.configured) {
+      try {
+        const client = getRedisClient();
+        const pong = await Promise.race([
+          client.ping(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Redis ping timeout")), 1500),
+          ),
+        ]);
+
+        redis.ok = pong === "PONG";
+        redis.status = redis.ok ? "connected" : "unexpected_response";
+      } catch (error) {
+        redis.ok = false;
+        redis.status = "error";
+        redis.error = error.message;
+      }
+    }
+
+    const healthy = mongo.ok && (!redis.configured || redis.ok);
+
+    return res.status(healthy ? 200 : 503).json({
+      status: healthy ? "healthy" : "degraded",
+      service: "mentalhealth-backend",
+      version: packageJson.version,
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+      responseTimeMs: Date.now() - startedAt,
+      checks: {
+        mongo,
+        redis,
+      },
+    });
   });
 
   app.get("/deployment-version", (_req, res) => {

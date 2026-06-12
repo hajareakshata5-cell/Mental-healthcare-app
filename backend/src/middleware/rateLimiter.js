@@ -211,4 +211,4 @@ const authLimiter = rateLimit({
   },
 });
 
-module.exports = { apiLimiter, authLimiter, callApiLimiter };
+module.exports = { apiLimiter, authLimiter, callApiLimiter, getRedisClient };
