@@ -763,17 +763,52 @@ const acceptFriendCall = asyncHandler(async (req, res) => {
   const callLog = await CallLog.findOne({
     _id: callId,
     targetUserId: receiver._id,
-    status: "pending",
   }).populate("userId", "username displayName anonymousAlias");
 
   if (!callLog) {
-    throw new ApiError(404, "Incoming call not found");
+    return res.status(200).json({
+      success: false,
+      status: "not_found",
+      message: "Incoming call not found or already cleared",
+    });
+  }
+
+  if (callLog.status === "accepted" || callLog.status === "connected") {
+    return res.status(200).json({
+      success: true,
+      status: callLog.status,
+      message: "Call already accepted",
+      call: buildCallJoinPayload({
+        callLog,
+        currentUser: receiver,
+        peerUser: callLog.userId,
+      }),
+    });
+  }
+
+  if (callLog.status !== "pending") {
+    return res.status(200).json({
+      success: false,
+      status: callLog.status,
+      message: "Call already handled",
+      call: {
+        id: callLog._id,
+        status: callLog.status,
+        callType: callLog.type,
+      },
+    });
   }
 
   if (isExpiredCall(callLog)) {
     callLog.status = "missed";
+    callLog.endedAt = new Date();
     await callLog.save();
-    throw new ApiError(410, "Call is no longer available");
+
+    return res.status(200).json({
+      success: false,
+      status: "missed",
+      message: "Call is no longer available",
+    });
   }
 
   callLog.status = "accepted";
@@ -782,6 +817,7 @@ const acceptFriendCall = asyncHandler(async (req, res) => {
 
   return res.status(200).json({
     success: true,
+    status: callLog.status,
     call: buildCallJoinPayload({
       callLog,
       currentUser: receiver,
@@ -904,33 +940,61 @@ const endCall = asyncHandler(async (req, res) => {
     throw new ApiError(400, "callId is required");
   }
 
-  const safeDuration = Math.max(0, Number(durationSeconds) || 0);
-  const safeRating = Math.max(0, Math.min(5, Number(rating) || 0));
-  const coinsEarned = Math.max(1, Math.floor(safeDuration / 60));
-
-  const callLog = await CallLog.findOneAndUpdate(
-  {
+  const existingCall = await CallLog.findOne({
     _id: callId,
     $or: [{ userId: req.user._id }, { targetUserId: req.user._id }],
-  },
-    {
-      durationSeconds: safeDuration,
-      status: "ended",
-      rating: safeRating,
-      feedback: feedback.toString().slice(0, 500),
-      coinsEarned,
-      endedAt: new Date(),
-    },
-    { new: true },
-  );
+  });
 
-  if (!callLog) {
+  if (!existingCall) {
     throw new ApiError(404, "Call not found");
   }
 
+  const safeDuration = Math.max(
+    Number(existingCall.durationSeconds || 0),
+    Math.max(0, Number(durationSeconds) || 0),
+  );
+  const safeRating = Math.max(0, Math.min(5, Number(rating) || 0));
+  const safeFeedback = feedback.toString().slice(0, 500);
+  const coinsEarned = Math.max(
+    Number(existingCall.coinsEarned || 0),
+    Math.max(1, Math.floor(safeDuration / 60)),
+  );
+
+  if (existingCall.status === "ended") {
+    if (
+      safeDuration > Number(existingCall.durationSeconds || 0) ||
+      (safeRating > 0 && safeRating !== Number(existingCall.rating || 0)) ||
+      (safeFeedback && safeFeedback !== String(existingCall.feedback || ""))
+    ) {
+      existingCall.durationSeconds = safeDuration;
+      existingCall.rating = safeRating || existingCall.rating || 0;
+      existingCall.feedback = safeFeedback || existingCall.feedback || "";
+      existingCall.coinsEarned = coinsEarned;
+      await existingCall.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      alreadyEnded: true,
+      call: existingCall,
+      reward: {
+        coinsEarned: existingCall.coinsEarned || coinsEarned,
+        durationMinutes: Math.floor((existingCall.durationSeconds || safeDuration) / 60),
+      },
+    });
+  }
+
+  existingCall.durationSeconds = safeDuration;
+  existingCall.status = "ended";
+  existingCall.rating = safeRating;
+  existingCall.feedback = safeFeedback;
+  existingCall.coinsEarned = coinsEarned;
+  existingCall.endedAt = new Date();
+  await existingCall.save();
+
   return res.status(200).json({
     success: true,
-    call: callLog,
+    call: existingCall,
     reward: {
       coinsEarned,
       durationMinutes: Math.floor(safeDuration / 60),
