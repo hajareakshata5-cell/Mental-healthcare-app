@@ -397,13 +397,43 @@ targetUserId,
 
 const FRIEND_CALL_TIMEOUT_MS = 45 * 1000;
 
-function displayUserName(user) {
+function isPlaceholderUserName(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, " ");
+
   return (
-    user?.displayName ||
-    user?.username ||
-    user?.anonymousAlias ||
-    "MindCare user"
+    !normalized ||
+    normalized === "co learner" ||
+    normalized === "co-learner" ||
+    normalized === "unknown" ||
+    normalized === "mindcare user" ||
+    normalized === "mindcare friend" ||
+    normalized.startsWith("anon ") ||
+    normalized.startsWith("temp ")
   );
+}
+
+function displayUserName(user) {
+  const emailPrefix = user?.email ? String(user.email).split("@")[0] : "";
+
+  const candidates = [
+    user?.displayName,
+    user?.username,
+    user?.name,
+    emailPrefix,
+    user?.alias,
+    user?.anonymousAlias,
+  ];
+
+  for (const candidate of candidates) {
+    if (!isPlaceholderUserName(candidate)) {
+      return String(candidate).trim();
+    }
+  }
+
+  return "MindCare friend";
 }
 
 function isExpiredCall(callLog) {
@@ -1007,13 +1037,39 @@ const getCallHistory = asyncHandler(async (req, res) => {
   status: "ended",
   $or: [{ userId: req.user._id }, { targetUserId: req.user._id }],
 })
-  .populate("userId", "username displayName anonymousAlias")
-  .populate("targetUserId", "username displayName anonymousAlias")
+  .populate("userId", "username displayName anonymousAlias alias email")
+  .populate("targetUserId", "username displayName anonymousAlias alias email")
   .sort({ createdAt: -1 })
   .limit(50);
+
+  const currentUserId = req.user._id.toString();
+
+  const enrichedCalls = calls.map((call) => {
+    const obj = call.toObject ? call.toObject() : call;
+
+    const callerId = call.userId?._id
+      ? call.userId._id.toString()
+      : call.userId?.toString?.();
+
+    const peerUser =
+      callerId === currentUserId ? call.targetUserId : call.userId;
+
+    const peerName = displayUserName(peerUser);
+
+    return {
+      ...obj,
+      peerId: peerUser?._id || null,
+      peerName,
+      peerAlias: peerName,
+      displayName: peerName,
+      username: peerUser?.username || peerName,
+      email: peerUser?.email || null,
+    };
+  });
+
   return res.status(200).json({
     success: true,
-    calls,
+    calls: enrichedCalls,
   });
 });
 
@@ -1077,3 +1133,6 @@ module.exports = {
   getCallHistory,
   getCallProgress,
 };
+
+
+
