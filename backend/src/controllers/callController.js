@@ -1,4 +1,4 @@
-const {
+﻿const {
   RtcTokenBuilder,
   RtcRole,
 } = require("agora-access-token");
@@ -429,7 +429,7 @@ async function hasActiveFriendCall(userId) {
   }
 
   // Safety cleanup: prevents users from being permanently busy after crash/failed join.
-  const staleConnectedMs = 90 * 60 * 1000;
+  const staleConnectedMs = Number(process.env.FRIEND_CONNECTED_STALE_MS || 2 * 60 * 1000);
   if (
     (activeCall.status === "accepted" || activeCall.status === "connected") &&
     ageMs > staleConnectedMs
@@ -473,7 +473,7 @@ const cleanupStaleFriendCallsForUsers = async (callerId, receiverId) => {
   const now = new Date();
 
   const shortStaleTime = new Date(Date.now() - 90 * 1000);
-  const longStaleTime = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const longStaleTime = new Date(Date.now() - Number(process.env.FRIEND_CONNECTED_STALE_MS || 2 * 60 * 1000));
 
   await CallLog.updateMany(
     {
