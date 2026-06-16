@@ -7,6 +7,7 @@ const {
   hasLifetimeFreeAccess,
   buildLifetimeFreeSubscription,
 } = require("../services/lifetimeFreeAccessService");
+const { buildCallDurationPolicy } = require("../services/callDurationPolicyService");
 
 const plans = {
   "3m": {
@@ -47,6 +48,7 @@ const getPlans = asyncHandler(async (req, res) => {
 
 const getSubscription = asyncHandler(async (req, res) => {
   if (hasLifetimeFreeAccess(req.user)) {
+    const durationPolicy = await buildCallDurationPolicy(req.user);
     const subscription = buildLifetimeFreeSubscription(req.user._id);
     return res.json({
       success: true,
@@ -58,12 +60,20 @@ const getSubscription = asyncHandler(async (req, res) => {
         isPremium: true,
       },
       availablePlans: plans,
+      callDurationPolicy: durationPolicy,
     });
   }
 
+  const durationPolicy = await buildCallDurationPolicy(req.user);
   const subscription = await Subscription.findOne({ userId: req.user._id });
   const callAccess = await canStartCall(req.user);
-  res.json({ success: true, subscription, callAccess, availablePlans: plans });
+  res.json({
+    success: true,
+    subscription,
+    callAccess,
+    availablePlans: plans,
+    callDurationPolicy: durationPolicy,
+  });
 });
 
 async function buildSubscriptionState(userId, subscription, plan, startsAt) {
