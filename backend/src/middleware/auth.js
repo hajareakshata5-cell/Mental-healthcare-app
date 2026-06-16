@@ -1,6 +1,7 @@
 const ApiError = require("../utils/ApiError");
 const User = require("../models/User");
 const { verifyAccessToken } = require("../services/tokenService");
+const { hasLifetimeFreeAccess } = require("../services/lifetimeFreeAccessService");
 
 function shouldLogAuthDebug() {
   return (
@@ -88,6 +89,10 @@ async function authRequired(req, _res, next) {
 
 async function requireCallAccess(req, _res, next) {
   try {
+    if (hasLifetimeFreeAccess(req.user)) {
+      return next();
+    }
+
     if (req.user?.isSubscribed) {
       return next();
     }

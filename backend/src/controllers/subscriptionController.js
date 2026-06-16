@@ -3,6 +3,10 @@ const Payment = require("../models/Payment");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiError = require("../utils/ApiError");
 const { canStartCall } = require("../services/callPolicyService");
+const {
+  hasLifetimeFreeAccess,
+  buildLifetimeFreeSubscription,
+} = require("../services/lifetimeFreeAccessService");
 
 const plans = {
   "3m": {
@@ -42,6 +46,21 @@ const getPlans = asyncHandler(async (req, res) => {
 });
 
 const getSubscription = asyncHandler(async (req, res) => {
+  if (hasLifetimeFreeAccess(req.user)) {
+    const subscription = buildLifetimeFreeSubscription(req.user._id);
+    return res.json({
+      success: true,
+      subscription,
+      callAccess: {
+        allowed: true,
+        reason: "lifetime_free_email",
+        remainingFreeCalls: null,
+        isPremium: true,
+      },
+      availablePlans: plans,
+    });
+  }
+
   const subscription = await Subscription.findOne({ userId: req.user._id });
   const callAccess = await canStartCall(req.user);
   res.json({ success: true, subscription, callAccess, availablePlans: plans });
